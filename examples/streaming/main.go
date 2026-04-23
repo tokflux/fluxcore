@@ -19,7 +19,7 @@ func main() {
 	}
 
 	// Create endpoint and pool
-	ep := routing.NewEndpoint(1, key, "", 0.01, 0.03)
+	ep, _ := routing.NewEndpoint(1, key, "", 10000) // priority = 10000 (lower is better)
 	pool := routing.NewEndpointPool([]*routing.Endpoint{ep}, 3)
 
 	// Request body

@@ -19,12 +19,10 @@ func newTestEndpoint(id uint, healthy bool) *Endpoint {
 
 func TestNewEndpointPool(t *testing.T) {
 	ep1 := newTestEndpoint(1, true)
-	ep1.InputPrice = 0.01
-	ep1.OutputPrice = 0.03
+	ep1.Priority = 10
 
 	ep2 := newTestEndpoint(2, true)
-	ep2.InputPrice = 0.02
-	ep2.OutputPrice = 0.04
+	ep2.Priority = 20
 
 	ep3 := newTestEndpoint(3, false)
 
@@ -39,7 +37,7 @@ func TestNewEndpointPool(t *testing.T) {
 		t.Error("expected current endpoint to be set")
 	}
 
-	// Should select cheapest (ep1)
+	// Should select lowest priority (ep1)
 	if pool.CurrentEp().ID != 1 {
 		t.Errorf("expected endpoint 1 as best, got %d", pool.CurrentEp().ID)
 	}
@@ -87,12 +85,10 @@ func TestPoolMarkFailCircuitBreaker(t *testing.T) {
 
 func TestPoolConcurrentAccess(t *testing.T) {
 	ep1 := newTestEndpoint(1, true)
-	ep1.InputPrice = 0.01
-	ep1.OutputPrice = 0.03
+	ep1.Priority = 10
 
 	ep2 := newTestEndpoint(2, true)
-	ep2.InputPrice = 0.02
-	ep2.OutputPrice = 0.04
+	ep2.Priority = 20
 
 	endpoints := []*Endpoint{ep1, ep2}
 	pool := NewEndpointPool(endpoints, 2)
@@ -149,31 +145,27 @@ func TestPoolSelectBest(t *testing.T) {
 		expected  uint
 	}{
 		{
-			name: "select cheapest",
+			name: "select lowest_priority",
 			endpoints: func() []*Endpoint {
 				ep1 := newTestEndpoint(1, true)
-				ep1.InputPrice = 10
-				ep1.OutputPrice = 20
+				ep1.Priority = 100
 
 				ep2 := newTestEndpoint(2, true)
-				ep2.InputPrice = 1
-				ep2.OutputPrice = 2
+				ep2.Priority = 10
 
 				return []*Endpoint{ep1, ep2}
 			}(),
 			expected: 2,
 		},
 		{
-			name: "select faster when same price",
+			name: "select faster when same priority",
 			endpoints: func() []*Endpoint {
 				ep1 := newTestEndpoint(1, true)
-				ep1.InputPrice = 1
-				ep1.OutputPrice = 2
+				ep1.Priority = 10
 				ep1.LatencyMs = 500
 
 				ep2 := newTestEndpoint(2, true)
-				ep2.InputPrice = 1
-				ep2.OutputPrice = 2
+				ep2.Priority = 10
 				ep2.LatencyMs = 100
 
 				return []*Endpoint{ep1, ep2}
@@ -289,8 +281,8 @@ func TestConcurrentHealthStatus(t *testing.T) {
 
 func TestPoolRaceConditions(t *testing.T) {
 	endpoints := []*Endpoint{
-		{ID: 1, Key: &Key{Protocol: ProtocolOpenAI}, InputPrice: 0.01, state: &endpointState{}},
-		{ID: 2, Key: &Key{Protocol: ProtocolOpenAI}, InputPrice: 0.02, state: &endpointState{}},
+		{ID: 1, Key: &Key{Protocol: ProtocolOpenAI}, Priority: 10, state: &endpointState{}},
+		{ID: 2, Key: &Key{Protocol: ProtocolOpenAI}, Priority: 20, state: &endpointState{}},
 	}
 	for _, ep := range endpoints {
 		ep.setHealthy(true)

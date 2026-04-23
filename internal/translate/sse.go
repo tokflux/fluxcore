@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tokzone/fluxcore/message"
@@ -34,11 +35,45 @@ const (
 	SSETypeError = "error"
 )
 
-// SSE buffer sizes
-const (
-	SSEBufferSize    = 4096
-	SSEChannelBuffer = 100
-)
+// SSEConfig holds SSE configuration.
+type SSEConfig struct {
+	BufferSize    int // Read buffer size (default: 4096)
+	ChannelBuffer int // Event channel buffer size (default: 100)
+}
+
+var sseConfig = SSEConfig{
+	BufferSize:    4096,
+	ChannelBuffer: 100,
+}
+
+var sseConfigMu sync.RWMutex
+
+// SetSSEConfig updates the SSE configuration.
+// Zero values are ignored (keep current defaults).
+func SetSSEConfig(cfg *SSEConfig) {
+	if cfg == nil {
+		return
+	}
+	sseConfigMu.Lock()
+	defer sseConfigMu.Unlock()
+	if cfg.BufferSize > 0 {
+		sseConfig.BufferSize = cfg.BufferSize
+	}
+	if cfg.ChannelBuffer > 0 {
+		sseConfig.ChannelBuffer = cfg.ChannelBuffer
+	}
+}
+
+// GetSSEConfig returns the current SSE configuration.
+func GetSSEConfig() SSEConfig {
+	sseConfigMu.RLock()
+	defer sseConfigMu.RUnlock()
+	return sseConfig
+}
+
+// SSEBufferSize and SSEChannelBuffer are kept for backward compatibility.
+var SSEBufferSize = sseConfig.BufferSize
+var SSEChannelBuffer = sseConfig.ChannelBuffer
 
 type SSEEvent struct {
 	Type   string            // SSETypeData, SSETypeEvent, SSETypeDone, SSETypeError
@@ -54,13 +89,23 @@ type SSEParseResult struct {
 }
 
 func ParseSSEStream(ctx context.Context, reader io.ReadCloser, format string, startTime time.Time) chan SSEParseResult {
-	ch := make(chan SSEParseResult, SSEChannelBuffer)
+	sseConfigMu.RLock()
+	bufSize := sseConfig.BufferSize
+	chBuf := sseConfig.ChannelBuffer
+	sseConfigMu.RUnlock()
+
+	ch := make(chan SSEParseResult, chBuf)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[fluxcore] SSE parser panic recovered: %v", r)
+			}
+		}()
 		defer close(ch)
 		defer reader.Close()
 
-		buf := make([]byte, SSEBufferSize)
+		buf := make([]byte, bufSize)
 		accumulated := &strings.Builder{}
 		usageData := &message.Usage{}
 

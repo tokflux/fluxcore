@@ -80,12 +80,11 @@ func createTestEndpoints(n int) []*Endpoint {
 	endpoints := make([]*Endpoint, n)
 	for i := 0; i < n; i++ {
 		ep := &Endpoint{
-			ID:          uint(i + 1),
-			Key:         &Key{BaseURL: "https://api.example.com", APIKey: "key", Protocol: ProtocolOpenAI},
-			Model:       "model",
-			InputPrice:  float64(i+1) * 0.01,
-			OutputPrice: float64(i+1) * 0.02,
-			state:       &endpointState{},
+			ID:       uint(i + 1),
+			Key:      &Key{BaseURL: "https://api.example.com", APIKey: "key", Protocol: ProtocolOpenAI},
+			Model:    "model",
+			Priority: int64(i + 1),
+			state:    &endpointState{},
 		}
 		ep.setHealthy(true)
 		endpoints[i] = ep

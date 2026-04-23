@@ -6,11 +6,11 @@ import (
 )
 
 func TestSelectBest(t *testing.T) {
-	t.Run("selects_cheapest", func(t *testing.T) {
+	t.Run("selects_lowest_priority", func(t *testing.T) {
 		endpoints := []*Endpoint{
-			{ID: 1, Key: &Key{Protocol: ProtocolOpenAI}, InputPrice: 0.02, OutputPrice: 0.03, state: &endpointState{}},
-			{ID: 2, Key: &Key{Protocol: ProtocolOpenAI}, InputPrice: 0.01, OutputPrice: 0.01, state: &endpointState{}}, // Cheapest
-			{ID: 3, Key: &Key{Protocol: ProtocolOpenAI}, InputPrice: 0.05, OutputPrice: 0.05, state: &endpointState{}},
+			{ID: 1, Key: &Key{Protocol: ProtocolOpenAI}, Priority: 50, state: &endpointState{}},
+			{ID: 2, Key: &Key{Protocol: ProtocolOpenAI}, Priority: 20, state: &endpointState{}}, // Lowest priority
+			{ID: 3, Key: &Key{Protocol: ProtocolOpenAI}, Priority: 100, state: &endpointState{}},
 		}
 		for _, ep := range endpoints {
 			ep.setHealthy(true)
@@ -18,14 +18,14 @@ func TestSelectBest(t *testing.T) {
 
 		selected := selectBest(endpoints)
 		if selected.ID != 2 {
-			t.Errorf("expected cheapest endpoint ID 2, got %d", selected.ID)
+			t.Errorf("expected lowest priority endpoint ID 2, got %d", selected.ID)
 		}
 	})
 
-	t.Run("same_price_selects_lower_latency", func(t *testing.T) {
+	t.Run("same_priority_selects_lower_latency", func(t *testing.T) {
 		endpoints := []*Endpoint{
-			{ID: 1, Key: &Key{Protocol: ProtocolOpenAI}, InputPrice: 0.01, OutputPrice: 0.01, LatencyMs: 100, state: &endpointState{}},
-			{ID: 2, Key: &Key{Protocol: ProtocolOpenAI}, InputPrice: 0.01, OutputPrice: 0.01, LatencyMs: 50, state: &endpointState{}}, // Lower latency
+			{ID: 1, Key: &Key{Protocol: ProtocolOpenAI}, Priority: 20, LatencyMs: 100, state: &endpointState{}},
+			{ID: 2, Key: &Key{Protocol: ProtocolOpenAI}, Priority: 20, LatencyMs: 50, state: &endpointState{}}, // Lower latency
 		}
 		for _, ep := range endpoints {
 			ep.setHealthy(true)
@@ -48,8 +48,8 @@ func TestSelectBest(t *testing.T) {
 func TestPoolSelectBestMethod(t *testing.T) {
 	t.Run("skips_unhealthy", func(t *testing.T) {
 		endpoints := []*Endpoint{
-			{ID: 1, Key: &Key{Protocol: ProtocolOpenAI}, InputPrice: 0.01, state: &endpointState{}},
-			{ID: 2, Key: &Key{Protocol: ProtocolOpenAI}, InputPrice: 0.02, state: &endpointState{}},
+			{ID: 1, Key: &Key{Protocol: ProtocolOpenAI}, Priority: 10, state: &endpointState{}},
+			{ID: 2, Key: &Key{Protocol: ProtocolOpenAI}, Priority: 20, state: &endpointState{}},
 		}
 		endpoints[0].setHealthy(false)
 		endpoints[0].setLastFail(time.Now()) // Recent failure - should skip

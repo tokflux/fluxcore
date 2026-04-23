@@ -135,3 +135,15 @@ func ExtractAllText(contents []Content) string {
 	}
 	return sb.String()
 }
+
+// ForEachText iterates over text content items and calls the callback for each.
+// Useful for building provider-specific text parts.
+func ForEachText(contents []Content, fn func(text string)) {
+	for _, c := range contents {
+		if c.IsText() {
+			if text := c.AsText(); text != "" {
+				fn(text)
+			}
+		}
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"sync/atomic"
 	"time"
@@ -14,6 +15,8 @@ import (
 	"github.com/tokzone/fluxcore/routing"
 	"github.com/tokzone/fluxcore/internal/translate"
 )
+
+const DefaultWrappedChannelBuffer = 100
 
 // atomicUsage provides thread-safe access to usage statistics.
 type atomicUsage struct {
@@ -42,10 +45,11 @@ func (u *atomicUsage) Set(usage *message.Usage) {
 }
 
 // StreamResult holds the result of a streaming request.
-// Thread-safe: Ch can be read concurrently, Usage() and Close() are safe to call from any goroutine.
+// Thread-safe: Ch can be read concurrently, Usage() and Error() and Close() are safe to call from any goroutine.
 type StreamResult struct {
 	Ch     chan []byte
 	Usage  func() *message.Usage
+	Error  func() error      // Returns the first error encountered during streaming
 	cancel context.CancelFunc
 }
 
@@ -82,8 +86,13 @@ func RequestStream(ctx context.Context, pool *routing.EndpointPool, rawReq []byt
 
 		result, err := callStreamWithParsedRequest(ctx, ep, req, inputProtocol)
 		if err == nil {
-			wrappedCh := make(chan []byte, 100)
+			wrappedCh := make(chan []byte, DefaultWrappedChannelBuffer)
 			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("[fluxcore] stream wrapper panic recovered: %v", r)
+					}
+				}()
 				defer close(wrappedCh)
 				defer result.Close()
 				for {
@@ -103,6 +112,7 @@ func RequestStream(ctx context.Context, pool *routing.EndpointPool, rawReq []byt
 			return &StreamResult{
 				Ch:     wrappedCh,
 				Usage:  result.Usage,
+				Error:  result.Error,
 				cancel: result.cancel,
 			}, nil
 		}
@@ -133,15 +143,25 @@ func callStreamWithParsedRequest(ctx context.Context, ep *routing.Endpoint, req 
 		return nil, err
 	}
 
-	ch := make(chan []byte, translate.SSEChannelBuffer)
+	ch := make(chan []byte, translate.GetSSEConfig().ChannelBuffer)
 	usageData := &atomicUsage{}
+	var firstError atomic.Pointer[error]
 
 	eventCh := translate.ParseSSEStream(ctx, respBody, ep.Key.Protocol.String(), start)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[fluxcore] SSE processor panic recovered: %v", r)
+			}
+		}()
 		defer close(ch)
 		for result := range eventCh {
 			if result.Error != nil {
+				// Store first error only
+				if firstError.Load() == nil {
+					firstError.Store(&result.Error)
+				}
 				continue
 			}
 
@@ -170,6 +190,7 @@ func callStreamWithParsedRequest(ctx context.Context, ep *routing.Endpoint, req 
 	return &StreamResult{
 		Ch:     ch,
 		Usage:  usageData.Get,
+		Error:  func() error { if p := firstError.Load(); p != nil { return *p }; return nil },
 		cancel: cancel,
 	}, nil
 }
@@ -192,7 +213,7 @@ func streamTransport(ctx context.Context, ep *routing.Endpoint, body []byte) (io
 
 	if resp.StatusCode >= 400 {
 		cancel()
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, DefaultErrorBodyLimit))
 		resp.Body.Close()
 		return nil, nil, errors.ClassifyHTTPError(resp.StatusCode, string(respBody))
 	}

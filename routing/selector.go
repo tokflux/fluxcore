@@ -8,24 +8,23 @@ import (
 // ErrNoEndpoints is returned when no endpoints are available
 var ErrNoEndpoints = errors.New("no endpoints available")
 
-// selectBest returns the best endpoint by price (lower is better), then latency
+// compareEndpoint compares two endpoints for sorting.
+// Returns negative if a is better, positive if b is better, 0 if equal.
+func compareEndpoint(a, b *Endpoint) int {
+	// Compare by priority (lower is better)
+	if a.Priority != b.Priority {
+		return int(a.Priority - b.Priority)
+	}
+	// Same priority: compare by latency (lower is better)
+	return a.LatencyMs - b.LatencyMs
+}
+
+// selectBest returns the best endpoint by priority (lower is better), then latency
 func selectBest(endpoints []*Endpoint) *Endpoint {
 	if len(endpoints) == 0 {
 		return nil
 	}
-	return slices.MinFunc(endpoints, func(a, b *Endpoint) int {
-		aPrice := a.InputPrice + a.OutputPrice
-		bPrice := b.InputPrice + b.OutputPrice
-		if aPrice != bPrice {
-			// Compare by price (lower is better)
-			if aPrice < bPrice {
-				return -1
-			}
-			return 1
-		}
-		// Same price: compare by latency (lower is better)
-		return a.LatencyMs - b.LatencyMs
-	})
+	return slices.MinFunc(endpoints, compareEndpoint)
 }
 
 

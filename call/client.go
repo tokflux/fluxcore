@@ -16,6 +16,13 @@ import (
 // DefaultTimeout is the default HTTP request timeout.
 const DefaultTimeout = 30 * time.Second
 
+const (
+	DefaultMaxIdleConns        = 100
+	DefaultMaxIdleConnsPerHost = 10
+	DefaultIdleConnTimeout     = 90 * time.Second
+	DefaultErrorBodyLimit      = 4096
+)
+
 // Config holds configuration for the HTTP client.
 // Zero values use defaults (Timeout=30s).
 type Config struct {
@@ -25,9 +32,9 @@ type Config struct {
 var sharedClient = &http.Client{
 	Timeout: DefaultTimeout,
 	Transport: &http.Transport{
-		MaxIdleConns:        100,
-		MaxIdleConnsPerHost: 10,
-		IdleConnTimeout:     90 * time.Second,
+		MaxIdleConns:        DefaultMaxIdleConns,
+		MaxIdleConnsPerHost: DefaultMaxIdleConnsPerHost,
+		IdleConnTimeout:     DefaultIdleConnTimeout,
 	},
 }
 
@@ -97,6 +104,13 @@ func Request(ctx context.Context, pool *routing.EndpointPool, rawReq []byte, inp
 }
 
 func transport(ctx context.Context, ep *routing.Endpoint, body []byte) ([]byte, error) {
+	// If ctx has no deadline, add default timeout
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, DefaultTimeout)
+		defer cancel()
+	}
+
 	req, err := http.NewRequestWithContext(ctx, "POST", buildURL(ep, false), bytes.NewReader(body))
 	if err != nil {
 		return nil, err
@@ -110,7 +124,7 @@ func transport(ctx context.Context, ep *routing.Endpoint, body []byte) ([]byte, 
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, DefaultErrorBodyLimit))
 		return nil, errors.ClassifyHTTPError(resp.StatusCode, string(respBody))
 	}
 

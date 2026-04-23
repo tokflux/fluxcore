@@ -12,6 +12,9 @@ import (
 
 // buildURL constructs the API URL for an endpoint
 func buildURL(ep *routing.Endpoint, stream bool) string {
+	if ep == nil || ep.Key == nil {
+		return ""
+	}
 	var path string
 	switch ep.Key.Protocol {
 	case routing.ProtocolGemini:
@@ -32,6 +35,9 @@ func buildURL(ep *routing.Endpoint, stream bool) string {
 
 // setHeaders sets the required headers for an API request
 func setHeaders(req *http.Request, ep *routing.Endpoint, stream bool) {
+	if ep == nil || ep.Key == nil {
+		return
+	}
 	req.Header.Set("Content-Type", "application/json")
 	if stream {
 		req.Header.Set("Accept", "text/event-stream")

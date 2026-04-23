@@ -31,8 +31,8 @@ func TestRequestRetrySuccess(t *testing.T) {
 	defer server2.Close()
 
 	// Create endpoints
-	ep1 := testEndpointWithPrice(1, server1.URL, "key1", routing.ProtocolOpenAI, 0.01)
-	ep2 := testEndpointWithPrice(2, server2.URL, "key2", routing.ProtocolOpenAI, 0.02)
+	ep1 := testEndpointWithPriority(1, server1.URL, "key1", routing.ProtocolOpenAI, int64(0.01 * 1000000))
+	ep2 := testEndpointWithPriority(2, server2.URL, "key2", routing.ProtocolOpenAI, int64(0.02 * 1000000))
 
 	pool := routing.NewEndpointPool([]*routing.Endpoint{ep1, ep2}, 3)
 
@@ -68,8 +68,8 @@ func TestRequestRetryAllFail(t *testing.T) {
 	defer server.Close()
 
 	// Create multiple endpoints so we can retry beyond circuit breaker threshold
-	ep1 := testEndpointWithPrice(1, server.URL, "key1", routing.ProtocolOpenAI, 0.01)
-	ep2 := testEndpointWithPrice(2, server.URL, "key2", routing.ProtocolOpenAI, 0.02)
+	ep1 := testEndpointWithPriority(1, server.URL, "key1", routing.ProtocolOpenAI, int64(0.01 * 1000000))
+	ep2 := testEndpointWithPriority(2, server.URL, "key2", routing.ProtocolOpenAI, int64(0.02 * 1000000))
 
 	pool := routing.NewEndpointPool([]*routing.Endpoint{ep1, ep2}, 3)
 
@@ -97,7 +97,7 @@ func TestRequestNoRetryOnNonRetryable(t *testing.T) {
 	}))
 	defer server.Close()
 
-	ep := testEndpointWithPrice(1, server.URL, "key", routing.ProtocolOpenAI, 0.01)
+	ep := testEndpointWithPriority(1, server.URL, "key", routing.ProtocolOpenAI, int64(0.01 * 1000000))
 	pool := routing.NewEndpointPool([]*routing.Endpoint{ep}, 3)
 
 	ctx := context.Background()
@@ -124,7 +124,7 @@ func TestRequestSuccessNoRetry(t *testing.T) {
 	}))
 	defer server.Close()
 
-	ep := testEndpointWithPrice(1, server.URL, "key", routing.ProtocolOpenAI, 0.01)
+	ep := testEndpointWithPriority(1, server.URL, "key", routing.ProtocolOpenAI, int64(0.01 * 1000000))
 	pool := routing.NewEndpointPool([]*routing.Endpoint{ep}, 3)
 
 	ctx := context.Background()
@@ -151,7 +151,7 @@ func TestRequestContextCancellationDuringRetry(t *testing.T) {
 	}))
 	defer server.Close()
 
-	ep := testEndpointWithPrice(1, server.URL, "key", routing.ProtocolOpenAI, 0.01)
+	ep := testEndpointWithPriority(1, server.URL, "key", routing.ProtocolOpenAI, int64(0.01 * 1000000))
 	pool := routing.NewEndpointPool([]*routing.Endpoint{ep}, 3)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -184,7 +184,7 @@ func TestRequestPoolMarkSuccess(t *testing.T) {
 	}))
 	defer server.Close()
 
-	ep := testEndpointWithPrice(1, server.URL, "key", routing.ProtocolOpenAI, 0.01)
+	ep := testEndpointWithPriority(1, server.URL, "key", routing.ProtocolOpenAI, int64(0.01 * 1000000))
 	pool := routing.NewEndpointPool([]*routing.Endpoint{ep}, 3)
 
 	ctx := context.Background()
@@ -208,7 +208,7 @@ func TestRequestPoolMarkFail(t *testing.T) {
 	}))
 	defer server.Close()
 
-	ep := testEndpointWithPrice(1, server.URL, "key", routing.ProtocolOpenAI, 0.01)
+	ep := testEndpointWithPriority(1, server.URL, "key", routing.ProtocolOpenAI, int64(0.01 * 1000000))
 	pool := routing.NewEndpointPool([]*routing.Endpoint{ep}, 3)
 
 	ctx := context.Background()
@@ -242,7 +242,7 @@ func TestRequestRateLimitRetry(t *testing.T) {
 	}))
 	defer server.Close()
 
-	ep := testEndpointWithPrice(1, server.URL, "key", routing.ProtocolOpenAI, 0.01)
+	ep := testEndpointWithPriority(1, server.URL, "key", routing.ProtocolOpenAI, int64(0.01 * 1000000))
 	pool := routing.NewEndpointPool([]*routing.Endpoint{ep}, 3)
 
 	ctx := context.Background()
@@ -339,8 +339,8 @@ func TestRequestConcurrentCalls(t *testing.T) {
 	}))
 	defer server.Close()
 
-	ep1 := testEndpointWithPrice(1, server.URL, "key", routing.ProtocolOpenAI, 0.01)
-	ep2 := testEndpointWithPrice(2, server.URL, "key", routing.ProtocolOpenAI, 0.02)
+	ep1 := testEndpointWithPriority(1, server.URL, "key", routing.ProtocolOpenAI, int64(0.01 * 1000000))
+	ep2 := testEndpointWithPriority(2, server.URL, "key", routing.ProtocolOpenAI, int64(0.02 * 1000000))
 
 	pool := routing.NewEndpointPool([]*routing.Endpoint{ep1, ep2}, 3)
 

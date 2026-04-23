@@ -23,7 +23,7 @@ func TestRequestWithAnthropicEndpoint(t *testing.T) {
 	}))
 	defer server.Close()
 
-	ep := testEndpointWithPrice(1, server.URL, "key", routing.ProtocolAnthropic, 0.008)
+	ep := testEndpointWithPriority(1, server.URL, "key", routing.ProtocolAnthropic, int64(0.008 * 1000000))
 	pool := routing.NewEndpointPool([]*routing.Endpoint{ep}, 2)
 
 	ctx := context.Background()
@@ -146,7 +146,7 @@ func TestRequestProtocolConversion(t *testing.T) {
 	}))
 	defer server.Close()
 
-	ep := testEndpointWithPrice(1, server.URL, "key", routing.ProtocolAnthropic, 0.008)
+	ep := testEndpointWithPriority(1, server.URL, "key", routing.ProtocolAnthropic, int64(0.008 * 1000000))
 	pool := routing.NewEndpointPool([]*routing.Endpoint{ep}, 2)
 
 	ctx := context.Background()

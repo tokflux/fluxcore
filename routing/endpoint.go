@@ -44,49 +44,56 @@ type endpointState struct {
 
 // Endpoint is the routing unit - a Key + Model combination.
 type Endpoint struct {
-	ID     uint      // Unique identifier
-	Key    *Key      // Connection info (shared pointer)
-	Model  string    // Model name. Required for Gemini (used in URL path). Empty for OpenAI/Anthropic/Cohere (model from request body).
+	ID     uint   // Unique identifier
+	Key    *Key   // Connection info (shared pointer)
+	Model  string // Model name. Required for Gemini (used in URL path). Empty for OpenAI/Anthropic/Cohere (model from request body).
 
 	// Routing attributes
-	InputPrice  float64 // Input token price
-	OutputPrice float64 // Output token price
-	LatencyMs   int     // Latency in milliseconds
+	Priority int64 // Generic priority for endpoint selection. Lower values are preferred.
+	// The semantic meaning (price, latency, custom combination) is defined by the caller.
+	LatencyMs int // Latency in milliseconds
 
 	// Health state (internal)
 	state *endpointState
 }
 
+// ErrNilKey is returned when attempting to create an endpoint with nil key.
+var ErrNilKey = errors.New("endpoint Key cannot be nil")
+
 // NewEndpoint creates a new endpoint with default healthy status and default circuit breaker config.
 // The model parameter is required for Gemini (used in URL construction like /v1/models/{model}:generateContent).
 // For OpenAI, Anthropic, and Cohere, pass empty string "" - the model is taken from the request body.
-// Panics if key is nil.
-func NewEndpoint(id uint, key *Key, model string, inputPrice, outputPrice float64) *Endpoint {
+// Returns ErrNilKey if key is nil.
+func NewEndpoint(id uint, key *Key, model string, priority int64) (*Endpoint, error) {
 	if key == nil {
-		panic("endpoint Key cannot be nil")
+		return nil, ErrNilKey
 	}
-	return NewEndpointWithConfig(id, key, model, inputPrice, outputPrice, CircuitBreakerConfig{})
+	return NewEndpointWithConfig(id, key, model, priority, CircuitBreakerConfig{})
 }
 
 // NewEndpointWithConfig creates a new endpoint with custom circuit breaker configuration.
-// Panics if key is nil.
-func NewEndpointWithConfig(id uint, key *Key, model string, inputPrice, outputPrice float64, cbConfig CircuitBreakerConfig) *Endpoint {
+// Returns ErrNilKey if key is nil.
+func NewEndpointWithConfig(id uint, key *Key, model string, priority int64, cbConfig CircuitBreakerConfig) (*Endpoint, error) {
 	if key == nil {
-		panic("endpoint Key cannot be nil")
+		return nil, ErrNilKey
 	}
 	cfg := cbConfig.defaults()
 	ep := &Endpoint{
-		ID:          id,
-		Key:         key,
-		Model:       model,
-		InputPrice:  inputPrice,
-		OutputPrice: outputPrice,
-		state:       &endpointState{},
+		ID:       id,
+		Key:      key,
+		Model:    model,
+		Priority: priority,
+		state:    &endpointState{},
 	}
 	ep.state.healthy.Store(true)
 	ep.state.threshold.Store(int32(cfg.Threshold))
 	ep.state.recoveryNanos.Store(cfg.RecoveryTimeout.Nanoseconds())
-	return ep
+	return ep, nil
+}
+
+// SetPriority updates the endpoint priority.
+func (ep *Endpoint) SetPriority(p int64) {
+	ep.Priority = p
 }
 
 // IsCircuitBreakerOpen returns true if the circuit breaker is open (endpoint should be skipped).
@@ -177,12 +184,6 @@ func (ep *Endpoint) Validate() error {
 	// Model is required for Gemini (used in URL path), optional for other protocols
 	if ep.Model == "" && ep.Key.Protocol == ProtocolGemini {
 		return errors.New("endpoint Model is required for Gemini protocol")
-	}
-	if ep.InputPrice < 0 {
-		return errors.New("endpoint InputPrice must be non-negative")
-	}
-	if ep.OutputPrice < 0 {
-		return errors.New("endpoint OutputPrice must be non-negative")
 	}
 	if ep.LatencyMs < 0 {
 		return errors.New("endpoint LatencyMs must be non-negative")

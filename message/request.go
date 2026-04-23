@@ -1,6 +1,10 @@
 package message
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+)
 
 // MessageRequest is the unified request format (OpenAI format as IR)
 type MessageRequest struct {
@@ -62,11 +66,31 @@ type StreamChoice struct {
 	FinishReason *string `json:"finish_reason,omitempty"`
 }
 
+// Validate validates the MessageRequest fields.
+func (r *MessageRequest) Validate() error {
+	if r.Model == "" {
+		return errors.New("model is required")
+	}
+	if len(r.Messages) == 0 {
+		return errors.New("messages is required")
+	}
+	if r.Temperature < 0 || r.Temperature > 2 {
+		return errors.New("temperature must be in [0, 2]")
+	}
+	if r.TopP < 0 || r.TopP > 1 {
+		return errors.New("top_p must be in [0, 1]")
+	}
+	if r.MaxTokens < 0 {
+		return errors.New("max_tokens must be non-negative")
+	}
+	return nil
+}
+
 // ParseRequest parses JSON bytes into a MessageRequest.
 func ParseRequest(data []byte) (*MessageRequest, error) {
 	var req MessageRequest
 	if err := json.Unmarshal(data, &req); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse request: %w", err)
 	}
 	return &req, nil
 }
@@ -75,7 +99,7 @@ func ParseRequest(data []byte) (*MessageRequest, error) {
 func ParseResponse(data []byte) (*MessageResponse, error) {
 	var resp MessageResponse
 	if err := json.Unmarshal(data, &resp); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse response: %w", err)
 	}
 	return &resp, nil
 }
@@ -105,6 +129,12 @@ func (r *MessageRequest) WithMaxTokens(maxTokens int) *MessageRequest {
 func (r *MessageRequest) Clone() *MessageRequest {
 	newReq := *r
 	newReq.Messages = make([]Message, len(r.Messages))
-	copy(newReq.Messages, r.Messages)
+	for i, msg := range r.Messages {
+		newReq.Messages[i] = Message{
+			Role:    msg.Role,
+			Content: make([]Content, len(msg.Content)),
+		}
+		copy(newReq.Messages[i].Content, msg.Content)
+	}
 	return &newReq
 }

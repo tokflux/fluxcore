@@ -6,10 +6,10 @@ import (
 )
 
 type EndpointPool struct {
-	_currentEp atomic.Pointer[Endpoint] // Cached best endpoint (lock-free read)
+	currentEp atomic.Pointer[Endpoint] // Cached best endpoint (lock-free read)
 	mu         sync.RWMutex
-	_endpoints []*Endpoint // Sequential access (routing)
-	_retryMax  int
+	endpoints []*Endpoint // Sequential access (routing)
+	retryMax  int
 }
 
 func NewEndpointPool(endpoints []*Endpoint, retryMax int) *EndpointPool {
@@ -18,13 +18,13 @@ func NewEndpointPool(endpoints []*Endpoint, retryMax int) *EndpointPool {
 	}
 
 	pool := &EndpointPool{
-		_endpoints: endpoints,
-		_retryMax:  retryMax,
+		endpoints: endpoints,
+		retryMax:  retryMax,
 	}
 
 	// Set initial currentEp to best endpoint
 	if best := pool.SelectBest(); best != nil {
-		pool._currentEp.Store(best)
+		pool.currentEp.Store(best)
 	}
 
 	return pool
@@ -32,12 +32,12 @@ func NewEndpointPool(endpoints []*Endpoint, retryMax int) *EndpointPool {
 
 // CurrentEp returns the cached best endpoint.
 func (p *EndpointPool) CurrentEp() *Endpoint {
-	return p._currentEp.Load()
+	return p.currentEp.Load()
 }
 
 // RetryMax returns the maximum retry count.
 func (p *EndpointPool) RetryMax() int {
-	return p._retryMax
+	return p.retryMax
 }
 
 // MarkFail marks an endpoint as failed and switches to another.
@@ -46,7 +46,7 @@ func (p *EndpointPool) MarkFail(ep *Endpoint) {
 
 	// Use CAS loop to ensure atomic switching
 	for {
-		current := p._currentEp.Load()
+		current := p.currentEp.Load()
 		if current != ep {
 			break
 		}
@@ -56,36 +56,44 @@ func (p *EndpointPool) MarkFail(ep *Endpoint) {
 			break
 		}
 
-		if p._currentEp.CompareAndSwap(current, newEp) {
+		if p.currentEp.CompareAndSwap(current, newEp) {
 			break
 		}
 	}
 }
 
 // selectBestExcluding selects best endpoint, excluding the specified one.
+// Zero-allocation: iterates directly without creating a filtered slice.
 func (p *EndpointPool) selectBestExcluding(exclude *Endpoint) *Endpoint {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	filtered := make([]*Endpoint, 0, len(p._endpoints))
-	for _, ep := range p._endpoints {
-		if ep != exclude && !ep.IsCircuitBreakerOpen() {
-			filtered = append(filtered, ep)
+	var best *Endpoint
+	for _, ep := range p.endpoints {
+		if ep == exclude || ep.IsCircuitBreakerOpen() {
+			continue
+		}
+		if best == nil || compareEndpoint(ep, best) < 0 {
+			best = ep
 		}
 	}
-	return selectBest(filtered)
+	return best
 }
 
 // SelectBest selects the best endpoint (skipping unhealthy ones).
+// Zero-allocation: iterates directly without creating a filtered slice.
 func (p *EndpointPool) SelectBest() *Endpoint {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	filtered := make([]*Endpoint, 0, len(p._endpoints))
-	for _, ep := range p._endpoints {
-		if !ep.IsCircuitBreakerOpen() {
-			filtered = append(filtered, ep)
+	var best *Endpoint
+	for _, ep := range p.endpoints {
+		if ep.IsCircuitBreakerOpen() {
+			continue
+		}
+		if best == nil || compareEndpoint(ep, best) < 0 {
+			best = ep
 		}
 	}
-	return selectBest(filtered)
+	return best
 }
