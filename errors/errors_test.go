@@ -16,7 +16,7 @@ func TestClassifiedErrorError(t *testing.T) {
 	}
 
 	// Test without original error
-	classified2 := New(CodeTimeout, "request timeout")
+	classified2 := Wrap(CodeTimeout, "request timeout", nil)
 	expected2 := "[timeout] request timeout"
 	if classified2.Error() != expected2 {
 		t.Errorf("expected '%s', got '%s'", expected2, classified2.Error())
@@ -89,12 +89,6 @@ func TestClassifyNetErrorTimeout(t *testing.T) {
 func TestIsRetryableWithNil(t *testing.T) {
 	if IsRetryable(nil) {
 		t.Error("nil error should not be retryable")
-	}
-}
-
-func TestGetCodeWithNil(t *testing.T) {
-	if GetCode(nil) != CodeNetworkError {
-		t.Errorf("nil error should return CodeNetworkError, got %s", GetCode(nil))
 	}
 }
 

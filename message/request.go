@@ -45,11 +45,6 @@ type Usage struct {
 	IsAccurate   bool `json:"is_accurate"` // Provider returned accurate usage (not estimated)
 }
 
-// TotalTokens returns total tokens used
-func (u *Usage) TotalTokens() int {
-	return u.InputTokens + u.OutputTokens
-}
-
 // StreamChunk represents a streaming response chunk (OpenAI format)
 type StreamChunk struct {
 	ID      string         `json:"id"`

@@ -272,23 +272,3 @@ func TestSSEConfig(t *testing.T) {
 		t.Errorf("expected ChannelBuffer 200, got %d", cfg.ChannelBuffer)
 	}
 }
-
-func TestSSEBufferSizeFunc(t *testing.T) {
-	original := GetSSEConfig()
-	defer SetSSEConfig(&original)
-
-	SetSSEConfig(&SSEConfig{BufferSize: 8192})
-	if SSEBufferSize() != 8192 {
-		t.Errorf("expected 8192, got %d", SSEBufferSize())
-	}
-}
-
-func TestSSEChannelBufferFunc(t *testing.T) {
-	original := GetSSEConfig()
-	defer SetSSEConfig(&original)
-
-	SetSSEConfig(&SSEConfig{ChannelBuffer: 200})
-	if SSEChannelBuffer() != 200 {
-		t.Errorf("expected 200, got %d", SSEChannelBuffer())
-	}
-}

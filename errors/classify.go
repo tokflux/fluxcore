@@ -59,14 +59,6 @@ func (e *ClassifiedError) Unwrap() error {
 	return e.Original
 }
 
-// New creates a classified error.
-func New(code ErrorCode, message string) *ClassifiedError {
-	return &ClassifiedError{
-		Code:    code,
-		Message: message,
-	}
-}
-
 // Wrap wraps an existing error with classification.
 func Wrap(code ErrorCode, message string, original error) *ClassifiedError {
 	return &ClassifiedError{
@@ -194,13 +186,4 @@ func IsRetryable(err error) bool {
 	}
 	// Unknown errors - be conservative
 	return false
-}
-
-// GetCode returns the error code
-func GetCode(err error) ErrorCode {
-	var classified *ClassifiedError
-	if stderrors.As(err, &classified) {
-		return classified.Code
-	}
-	return CodeNetworkError
 }

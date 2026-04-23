@@ -31,17 +31,6 @@ func TestMessageRequestMarshal(t *testing.T) {
 	}
 }
 
-func TestUsageTotalTokens(t *testing.T) {
-	usage := &Usage{
-		InputTokens:  100,
-		OutputTokens: 50,
-	}
-
-	if usage.TotalTokens() != 150 {
-		t.Errorf("expected 150 total tokens, got %d", usage.TotalTokens())
-	}
-}
-
 func TestTextContent(t *testing.T) {
 	c := TextContent("test")
 	if c.Type != "text" {
