@@ -7,7 +7,7 @@ import (
 	"github.com/tokzone/fluxcore/message"
 )
 
-func TestAnthropicSSEToOpenAISSEEventTypes(t *testing.T) {
+func TestAnthropicSSEToOpenAIsseEventTypes(t *testing.T) {
 	t.Run("content_block_delta", func(t *testing.T) {
 		data := []byte(`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`)
 		result := AnthropicSSEToOpenAISSE(data)
@@ -74,7 +74,7 @@ func TestAnthropicSSEToOpenAISSEEventTypes(t *testing.T) {
 	})
 }
 
-func TestOpenAISSEToAnthropicSSEEventTypes(t *testing.T) {
+func TestOpenAISSEToAnthropicsseEventTypes(t *testing.T) {
 	t.Run("with_role", func(t *testing.T) {
 		chunk := &message.StreamChunk{
 			ID:    "msg_123",
@@ -200,7 +200,7 @@ func TestOpenAISSEToAnthropicSSEEventTypes(t *testing.T) {
 	})
 }
 
-func TestGeminiSSEToOpenAISSEEventTypes(t *testing.T) {
+func TestGeminiSSEToOpenAIsseEventTypes(t *testing.T) {
 	t.Run("text_content", func(t *testing.T) {
 		data := []byte(`{"candidates":[{"content":{"parts":[{"text":"Hello"}]},"index":0}]}`)
 		result := GeminiSSEToOpenAISSE(data)
@@ -237,7 +237,7 @@ func TestGeminiSSEToOpenAISSEEventTypes(t *testing.T) {
 	})
 }
 
-func TestCohereSSEToOpenAISSEEventTypes(t *testing.T) {
+func TestCohereSSEToOpenAIsseEventTypes(t *testing.T) {
 	t.Run("text_generation", func(t *testing.T) {
 		data := []byte(`{"event_type":"text-generation","text":"Hello"}`)
 		result := CohereSSEToOpenAISSE(data)
@@ -273,8 +273,8 @@ func TestCohereSSEToOpenAISSEEventTypes(t *testing.T) {
 
 func TestConvertSSEEventIndirectConversion(t *testing.T) {
 	t.Run("anthropic_to_gemini_via_openai", func(t *testing.T) {
-		event := SSEEvent{
-			Type: SSETypeData,
+		event := sseEvent{
+			Type: sseTypeData,
 			Data: []byte(`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
 		}
 		result := ConvertSSEEvent(event, "anthropic", "gemini")
@@ -284,8 +284,8 @@ func TestConvertSSEEventIndirectConversion(t *testing.T) {
 	})
 
 	t.Run("gemini_to_cohere_via_openai", func(t *testing.T) {
-		event := SSEEvent{
-			Type: SSETypeData,
+		event := sseEvent{
+			Type: sseTypeData,
 			Data: []byte(`{"candidates":[{"content":{"parts":[{"text":"Hello"}]},"index":0}]}`),
 		}
 		result := ConvertSSEEvent(event, "gemini", "cohere")
@@ -295,8 +295,8 @@ func TestConvertSSEEventIndirectConversion(t *testing.T) {
 	})
 
 	t.Run("cohere_to_anthropic_via_openai", func(t *testing.T) {
-		event := SSEEvent{
-			Type: SSETypeData,
+		event := sseEvent{
+			Type: sseTypeData,
 			Data: []byte(`{"event_type":"text-generation","text":"Hello"}`),
 		}
 		result := ConvertSSEEvent(event, "cohere", "anthropic")

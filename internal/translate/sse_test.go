@@ -27,7 +27,7 @@ data: [DONE]
 
 	eventCh := ParseSSEStream(ctx, reader, "openai", start)
 
-	events := make([]SSEParseResult, 0)
+	events := make([]sseParseResult, 0)
 	for result := range eventCh {
 		events = append(events, result)
 	}
@@ -38,7 +38,7 @@ data: [DONE]
 	}
 
 	// Check first data event
-	if events[0].Event.Type != SSETypeData {
+	if events[0].Event.Type != sseTypeData {
 		t.Errorf("expected first event type 'data', got '%s'", events[0].Event.Type)
 	}
 
@@ -75,7 +75,7 @@ data: [DONE]
 
 	eventCh := ParseSSEStream(ctx, reader, "openai", start)
 
-	var usageResult *SSEParseResult
+	var usageResult *sseParseResult
 	for result := range eventCh {
 		if result.Usage != nil && result.Usage.IsAccurate {
 			usageResult = &result
@@ -95,8 +95,8 @@ data: [DONE]
 }
 
 func TestConvertSSEEventNoConversion(t *testing.T) {
-	event := SSEEvent{
-		Type:   SSETypeData,
+	event := sseEvent{
+		Type:   sseTypeData,
 		Data:   []byte(`{"id":"test","choices":[{"index":0,"delta":{"content":[{"type":"text","data":"Hello"}]}}]}`),
 		Format: "openai",
 	}
@@ -115,8 +115,8 @@ func TestConvertSSEEventAnthropicToOpenAI(t *testing.T) {
 	// Anthropic content_block_delta event
 	anthropicData := `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`
 
-	event := SSEEvent{
-		Type:   SSETypeData,
+	event := sseEvent{
+		Type:   sseTypeData,
 		Data:   []byte(anthropicData),
 		Format: "anthropic",
 	}
@@ -146,8 +146,8 @@ func TestConvertSSEEventOpenAIToAnthropic(t *testing.T) {
 		},
 	}
 
-	event := SSEEvent{
-		Type:   SSETypeData,
+	event := sseEvent{
+		Type:   sseTypeData,
 		Data:   []byte(`{"id":"test-1","choices":[{"index":0,"delta":{"content":[{"type":"text","data":"Hello"}]}}]}`),
 		Chunk:  chunk,
 		Format: "openai",
@@ -167,22 +167,22 @@ func TestConvertSSEEventOpenAIToAnthropic(t *testing.T) {
 func TestFormatSSEOutput(t *testing.T) {
 	tests := []struct {
 		name     string
-		event    SSEEvent
+		event    sseEvent
 		expected string
 	}{
 		{
 			name: "done event",
-			event: SSEEvent{Type: "done"},
+			event: sseEvent{Type: "done"},
 			expected: "data: [DONE]\n\n",
 		},
 		{
 			name: "data event",
-			event: SSEEvent{Type: SSETypeData, Data: []byte(`{"test":"value"}`)},
+			event: sseEvent{Type: sseTypeData, Data: []byte(`{"test":"value"}`)},
 			expected: "data: {\"test\":\"value\"}\n\n",
 		},
 		{
 			name: "event type",
-			event: SSEEvent{Type: "event", Data: []byte("event: ping")},
+			event: sseEvent{Type: "event", Data: []byte("event: ping")},
 			expected: "event: ping\n\n",
 		},
 	}
@@ -203,7 +203,7 @@ func TestParseSSELine(t *testing.T) {
 
 	// Test data line
 	result := parseSSELine("data: {\"id\":\"test\",\"choices\":[]}", "openai", start, usageData)
-	if result.Event.Type != SSETypeData {
+	if result.Event.Type != sseTypeData {
 		t.Errorf("expected type 'data', got '%s'", result.Event.Type)
 	}
 
@@ -239,7 +239,7 @@ func TestParseSSEContextCancellation(t *testing.T) {
 
 	eventCh := ParseSSEStream(ctx, reader, "openai", start)
 
-	events := make([]SSEParseResult, 0)
+	events := make([]sseParseResult, 0)
 	for result := range eventCh {
 		events = append(events, result)
 	}
@@ -255,20 +255,3 @@ func TestParseSSEContextCancellation(t *testing.T) {
 	}
 }
 
-func TestSSEConfig(t *testing.T) {
-	original := GetSSEConfig()
-	defer SetSSEConfig(&original)
-
-	SetSSEConfig(&SSEConfig{
-		BufferSize:    8192,
-		ChannelBuffer: 200,
-	})
-
-	cfg := GetSSEConfig()
-	if cfg.BufferSize != 8192 {
-		t.Errorf("expected BufferSize 8192, got %d", cfg.BufferSize)
-	}
-	if cfg.ChannelBuffer != 200 {
-		t.Errorf("expected ChannelBuffer 200, got %d", cfg.ChannelBuffer)
-	}
-}

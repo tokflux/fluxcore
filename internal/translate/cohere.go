@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	RegisterChunkParser("cohere", parseCohereChunk)
+	registerChunkParser("cohere", parseCohereChunk)
 }
 
 // CohereRequest represents Cohere API request structure

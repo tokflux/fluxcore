@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	RegisterChunkParser("gemini", parseGeminiChunk)
+	registerChunkParser("gemini", parseGeminiChunk)
 }
 
 // GeminiRequest represents Gemini API request structure
