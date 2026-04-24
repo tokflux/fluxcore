@@ -12,27 +12,27 @@ import (
 	"github.com/tokzone/fluxcore/message"
 )
 
-// ChunkParser parses SSE chunk data to StreamChunk
-type ChunkParser func(data []byte) (*message.StreamChunk, error)
+// chunkParser parses SSE chunk data to StreamChunk
+type chunkParser func(data []byte) (*message.StreamChunk, error)
 
-var chunkParsers = make(map[string]ChunkParser)
+var chunkParsers = make(map[string]chunkParser)
 
-// RegisterChunkParser registers a parser for a format
-func RegisterChunkParser(format string, parser ChunkParser) {
+// registerChunkParser registers a parser for a format
+func registerChunkParser(format string, parser chunkParser) {
 	chunkParsers[format] = parser
 }
 
 // getChunkParser returns the parser for a format, or nil for OpenAI format
-func getChunkParser(format string) ChunkParser {
+func getChunkParser(format string) chunkParser {
 	return chunkParsers[format]
 }
 
 // SSE event type constants
 const (
-	SSETypeData  = "data"
-	SSETypeEvent = "event"
-	SSETypeDone  = "done"
-	SSETypeError = "error"
+	sseTypeData  = "data"
+	sseTypeEvent = "event"
+	SSETypeDone  = "done" // exported for external use in call/stream.go
+	sseTypeError = "error"
 )
 
 // SSEConfig holds SSE configuration.
@@ -48,22 +48,6 @@ var sseConfig = SSEConfig{
 
 var sseConfigMu sync.RWMutex
 
-// SetSSEConfig updates the SSE configuration.
-// Zero values are ignored (keep current defaults).
-func SetSSEConfig(cfg *SSEConfig) {
-	if cfg == nil {
-		return
-	}
-	sseConfigMu.Lock()
-	defer sseConfigMu.Unlock()
-	if cfg.BufferSize > 0 {
-		sseConfig.BufferSize = cfg.BufferSize
-	}
-	if cfg.ChannelBuffer > 0 {
-		sseConfig.ChannelBuffer = cfg.ChannelBuffer
-	}
-}
-
 // GetSSEConfig returns the current SSE configuration.
 func GetSSEConfig() SSEConfig {
 	sseConfigMu.RLock()
@@ -71,42 +55,26 @@ func GetSSEConfig() SSEConfig {
 	return sseConfig
 }
 
-// SSEBufferSize returns the current buffer size.
-// Deprecated: Use GetSSEConfig().BufferSize instead.
-func SSEBufferSize() int {
-	sseConfigMu.RLock()
-	defer sseConfigMu.RUnlock()
-	return sseConfig.BufferSize
-}
-
-// SSEChannelBuffer returns the current channel buffer size.
-// Deprecated: Use GetSSEConfig().ChannelBuffer instead.
-func SSEChannelBuffer() int {
-	sseConfigMu.RLock()
-	defer sseConfigMu.RUnlock()
-	return sseConfig.ChannelBuffer
-}
-
-type SSEEvent struct {
-	Type   string            // SSETypeData, SSETypeEvent, SSETypeDone, SSETypeError
+type sseEvent struct {
+	Type   string            // sseTypeData, sseTypeEvent, SSETypeDone, sseTypeError
 	Data   []byte            // Raw data payload
 	Chunk  *message.StreamChunk // Parsed chunk (for data events)
 	Format string            // Source format
 }
 
-type SSEParseResult struct {
-	Event SSEEvent
+type sseParseResult struct {
+	Event sseEvent
 	Usage *message.Usage
 	Error error
 }
 
-func ParseSSEStream(ctx context.Context, reader io.ReadCloser, format string, startTime time.Time) chan SSEParseResult {
+func ParseSSEStream(ctx context.Context, reader io.ReadCloser, format string, startTime time.Time) chan sseParseResult {
 	sseConfigMu.RLock()
 	bufSize := sseConfig.BufferSize
 	chBuf := sseConfig.ChannelBuffer
 	sseConfigMu.RUnlock()
 
-	ch := make(chan SSEParseResult, chBuf)
+	ch := make(chan sseParseResult, chBuf)
 
 	go func() {
 		defer func() {
@@ -125,7 +93,7 @@ func ParseSSEStream(ctx context.Context, reader io.ReadCloser, format string, st
 			select {
 			case <-ctx.Done():
 				usageData.LatencyMs = int(time.Since(startTime).Milliseconds())
-				ch <- SSEParseResult{Usage: usageData, Error: ctx.Err()}
+				ch <- sseParseResult{Usage: usageData, Error: ctx.Err()}
 				return
 			default:
 			}
@@ -151,10 +119,10 @@ func ParseSSEStream(ctx context.Context, reader io.ReadCloser, format string, st
 			if readErr != nil {
 				if readErr != io.EOF {
 					log.Printf("[fluxcore] stream read error: %v", readErr)
-					ch <- SSEParseResult{Error: readErr}
+					ch <- sseParseResult{Error: readErr}
 				}
 				usageData.LatencyMs = int(time.Since(startTime).Milliseconds())
-				ch <- SSEParseResult{Usage: usageData}
+				ch <- sseParseResult{Usage: usageData}
 				return
 			}
 		}
@@ -163,14 +131,14 @@ func ParseSSEStream(ctx context.Context, reader io.ReadCloser, format string, st
 	return ch
 }
 
-func parseSSELine(line, format string, startTime time.Time, usageData *message.Usage) SSEParseResult {
-	result := SSEParseResult{}
+func parseSSELine(line, format string, startTime time.Time, usageData *message.Usage) sseParseResult {
+	result := sseParseResult{}
 
 	if strings.HasPrefix(line, "data: ") {
 		dataStr := strings.TrimPrefix(line, "data: ")
 
 		if dataStr == "[DONE]" {
-			result.Event = SSEEvent{
+			result.Event = sseEvent{
 				Type: SSETypeDone,
 				Data: []byte("[DONE]"),
 			}
@@ -189,8 +157,8 @@ func parseSSELine(line, format string, startTime time.Time, usageData *message.U
 			if chunk == nil {
 				return result // skip non-text events
 			}
-			result.Event = SSEEvent{
-				Type:   SSETypeData,
+			result.Event = sseEvent{
+				Type:   sseTypeData,
 				Data:   []byte(dataStr),
 				Chunk:  chunk,
 				Format: format,
@@ -208,8 +176,8 @@ func parseSSELine(line, format string, startTime time.Time, usageData *message.U
 				result.Error = err
 				return result
 			}
-			result.Event = SSEEvent{
-				Type:   SSETypeData,
+			result.Event = sseEvent{
+				Type:   sseTypeData,
 				Data:   []byte(dataStr),
 				Chunk:  &chunk,
 				Format: format,
@@ -221,8 +189,8 @@ func parseSSELine(line, format string, startTime time.Time, usageData *message.U
 			}
 		}
 	} else if strings.HasPrefix(line, "event: ") {
-		result.Event = SSEEvent{
-			Type: SSETypeEvent,
+		result.Event = sseEvent{
+			Type: sseTypeEvent,
 			Data: []byte(line),
 		}
 	}
@@ -251,17 +219,17 @@ var (
 	}
 )
 
-func ConvertSSEEvent(event SSEEvent, fromFormat, toFormat string) []byte {
+func ConvertSSEEvent(event sseEvent, fromFormat, toFormat string) []byte {
 	if fromFormat == toFormat {
-		if event.Type == SSETypeData {
+		if event.Type == sseTypeData {
 			return []byte("data: " + string(event.Data) + "\n\n")
-		} else if event.Type == SSETypeEvent {
+		} else if event.Type == sseTypeEvent {
 			return []byte(string(event.Data) + "\n\n")
 		}
 		return nil
 	}
 
-	if event.Type != SSETypeData {
+	if event.Type != sseTypeData {
 		return nil
 	}
 
@@ -338,31 +306,13 @@ func convertViaOpenAI(data []byte, toOpenAI func([]byte) []byte, fromOpenAI func
 	return fromOpenAI(&chunk)
 }
 
-// convertToAnthropic converts SSE format to Anthropic via OpenAI intermediate
-func convertToAnthropic(data []byte, toOpenAI func([]byte) []byte) []byte {
-	openaiData := toOpenAI(data)
-	if openaiData == nil {
-		return nil
-	}
-
-	dataStr := strings.TrimPrefix(string(openaiData), "data: ")
-	dataStr = strings.TrimSuffix(dataStr, "\n\n")
-
-	var chunk message.StreamChunk
-	if err := json.Unmarshal([]byte(dataStr), &chunk); err != nil {
-		return nil
-	}
-
-	return joinAnthropicEvents(OpenAISSEToAnthropicSSE(&chunk))
-}
-
-func FormatSSEOutput(event SSEEvent, targetFormat string) []byte {
+func FormatSSEOutput(event sseEvent, targetFormat string) []byte {
 	switch event.Type {
 	case SSETypeDone:
 		return []byte("data: [DONE]\n\n")
-	case SSETypeEvent:
+	case sseTypeEvent:
 		return []byte(string(event.Data) + "\n\n")
-	case SSETypeData:
+	case sseTypeData:
 		return []byte("data: " + string(event.Data) + "\n\n")
 	}
 	return nil

@@ -13,8 +13,8 @@ import (
 
 func TestConvertSSEEvent(t *testing.T) {
 	t.Run("same_format_passthrough", func(t *testing.T) {
-		event := SSEEvent{
-			Type: SSETypeData,
+		event := sseEvent{
+			Type: sseTypeData,
 			Data: []byte(`{"choices":[{"delta":{"content":"Hello"}}]}`),
 		}
 		result := ConvertSSEEvent(event, "openai", "openai")
@@ -27,8 +27,8 @@ func TestConvertSSEEvent(t *testing.T) {
 	})
 
 	t.Run("anthropic_to_openai", func(t *testing.T) {
-		event := SSEEvent{
-			Type: SSETypeData,
+		event := sseEvent{
+			Type: sseTypeData,
 			Data: []byte(`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
 		}
 		result := ConvertSSEEvent(event, "anthropic", "openai")
@@ -38,8 +38,8 @@ func TestConvertSSEEvent(t *testing.T) {
 	})
 
 	t.Run("gemini_to_openai", func(t *testing.T) {
-		event := SSEEvent{
-			Type: SSETypeData,
+		event := sseEvent{
+			Type: sseTypeData,
 			Data: []byte(`{"candidates":[{"content":{"parts":[{"text":"Hello"}]},"index":0}]}`),
 		}
 		result := ConvertSSEEvent(event, "gemini", "openai")
@@ -49,8 +49,8 @@ func TestConvertSSEEvent(t *testing.T) {
 	})
 
 	t.Run("cohere_to_openai", func(t *testing.T) {
-		event := SSEEvent{
-			Type: SSETypeData,
+		event := sseEvent{
+			Type: sseTypeData,
 			Data: []byte(`{"event_type":"text-generation","is_finished":false,"text":"Hello"}`),
 		}
 		result := ConvertSSEEvent(event, "cohere", "openai")
@@ -65,8 +65,8 @@ func TestConvertSSEEvent(t *testing.T) {
 				{Delta: message.Message{Content: []message.Content{message.TextContent("Hello")}}},
 			},
 		}
-		event := SSEEvent{
-			Type:  SSETypeData,
+		event := sseEvent{
+			Type:  sseTypeData,
 			Chunk: chunk,
 		}
 		result := ConvertSSEEvent(event, "openai", "anthropic")
@@ -81,8 +81,8 @@ func TestConvertSSEEvent(t *testing.T) {
 				{Delta: message.Message{Content: []message.Content{message.TextContent("Hello")}}},
 			},
 		}
-		event := SSEEvent{
-			Type:  SSETypeData,
+		event := sseEvent{
+			Type:  sseTypeData,
 			Chunk: chunk,
 		}
 		result := ConvertSSEEvent(event, "openai", "gemini")
@@ -97,8 +97,8 @@ func TestConvertSSEEvent(t *testing.T) {
 				{Delta: message.Message{Content: []message.Content{message.TextContent("Hello")}}},
 			},
 		}
-		event := SSEEvent{
-			Type:  SSETypeData,
+		event := sseEvent{
+			Type:  sseTypeData,
 			Chunk: chunk,
 		}
 		result := ConvertSSEEvent(event, "openai", "cohere")
@@ -108,8 +108,8 @@ func TestConvertSSEEvent(t *testing.T) {
 	})
 
 	t.Run("non_data_event_returns_nil", func(t *testing.T) {
-		event := SSEEvent{
-			Type: SSETypeEvent,
+		event := sseEvent{
+			Type: sseTypeEvent,
 			Data: []byte(`event: ping`),
 		}
 		result := ConvertSSEEvent(event, "openai", "anthropic")
@@ -119,8 +119,8 @@ func TestConvertSSEEvent(t *testing.T) {
 	})
 
 	t.Run("unknown_format_returns_nil", func(t *testing.T) {
-		event := SSEEvent{
-			Type: SSETypeData,
+		event := sseEvent{
+			Type: sseTypeData,
 			Data: []byte(`{}`),
 		}
 		result := ConvertSSEEvent(event, "unknown", "openai")
@@ -156,23 +156,6 @@ func TestConvertViaOpenAI(t *testing.T) {
 	})
 }
 
-func TestConvertToAnthropic(t *testing.T) {
-	t.Run("gemini_to_anthropic", func(t *testing.T) {
-		data := []byte(`{"candidates":[{"content":{"parts":[{"text":"Hello"}]},"index":0}]}`)
-		result := convertToAnthropic(data, GeminiSSEToOpenAISSE)
-		if result == nil {
-			t.Error("expected non-nil result")
-		}
-	})
-
-	t.Run("nil_input", func(t *testing.T) {
-		toOpenAI := func([]byte) []byte { return nil }
-		result := convertToAnthropic([]byte{}, toOpenAI)
-		if result != nil {
-			t.Error("expected nil for nil input")
-		}
-	})
-}
 
 func TestJoinAnthropicEvents(t *testing.T) {
 	t.Run("multiple_events", func(t *testing.T) {
@@ -204,7 +187,7 @@ func TestJoinAnthropicEvents(t *testing.T) {
 
 func TestFormatSSEOutputExtended(t *testing.T) {
 	t.Run("done_event", func(t *testing.T) {
-		event := SSEEvent{Type: SSETypeDone}
+		event := sseEvent{Type: SSETypeDone}
 		result := FormatSSEOutput(event, "openai")
 		if string(result) != "data: [DONE]\n\n" {
 			t.Errorf("unexpected done output: %s", result)
@@ -212,8 +195,8 @@ func TestFormatSSEOutputExtended(t *testing.T) {
 	})
 
 	t.Run("event_type", func(t *testing.T) {
-		event := SSEEvent{
-			Type: SSETypeEvent,
+		event := sseEvent{
+			Type: sseTypeEvent,
 			Data: []byte("event: ping"),
 		}
 		result := FormatSSEOutput(event, "openai")
@@ -223,8 +206,8 @@ func TestFormatSSEOutputExtended(t *testing.T) {
 	})
 
 	t.Run("data_event", func(t *testing.T) {
-		event := SSEEvent{
-			Type: SSETypeData,
+		event := sseEvent{
+			Type: sseTypeData,
 			Data: []byte(`{"test":true}`),
 		}
 		result := FormatSSEOutput(event, "openai")
@@ -234,7 +217,7 @@ func TestFormatSSEOutputExtended(t *testing.T) {
 	})
 
 	t.Run("unknown_type", func(t *testing.T) {
-		event := SSEEvent{Type: "unknown"}
+		event := sseEvent{Type: "unknown"}
 		result := FormatSSEOutput(event, "openai")
 		if result != nil {
 			t.Error("expected nil for unknown type")
@@ -249,8 +232,8 @@ func TestParseSSELineExtended(t *testing.T) {
 	t.Run("data_line", func(t *testing.T) {
 		line := "data: {\"choices\":[{\"delta\":{\"content\":[{\"type\":\"text\",\"data\":\"Hello\"}]}}]}"
 		result := parseSSELine(line, "openai", startTime, usageData)
-		if result.Event.Type != SSETypeData {
-			t.Errorf("expected SSETypeData, got %s", result.Event.Type)
+		if result.Event.Type != sseTypeData {
+			t.Errorf("expected sseTypeData, got %s", result.Event.Type)
 		}
 	})
 
@@ -265,8 +248,8 @@ func TestParseSSELineExtended(t *testing.T) {
 	t.Run("event_line", func(t *testing.T) {
 		line := "event: content_block_start"
 		result := parseSSELine(line, "openai", startTime, usageData)
-		if result.Event.Type != SSETypeEvent {
-			t.Errorf("expected SSETypeEvent, got %s", result.Event.Type)
+		if result.Event.Type != sseTypeEvent {
+			t.Errorf("expected sseTypeEvent, got %s", result.Event.Type)
 		}
 	})
 
@@ -288,24 +271,24 @@ func TestParseSSELineExtended(t *testing.T) {
 	t.Run("anthropic_format", func(t *testing.T) {
 		line := "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello\"}}"
 		result := parseSSELine(line, "anthropic", startTime, usageData)
-		if result.Event.Type != SSETypeData {
-			t.Errorf("expected SSETypeData, got %s", result.Event.Type)
+		if result.Event.Type != sseTypeData {
+			t.Errorf("expected sseTypeData, got %s", result.Event.Type)
 		}
 	})
 
 	t.Run("gemini_format", func(t *testing.T) {
 		line := "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"Hello\"}]},\"index\":0}]}"
 		result := parseSSELine(line, "gemini", startTime, usageData)
-		if result.Event.Type != SSETypeData {
-			t.Errorf("expected SSETypeData, got %s", result.Event.Type)
+		if result.Event.Type != sseTypeData {
+			t.Errorf("expected sseTypeData, got %s", result.Event.Type)
 		}
 	})
 
 	t.Run("cohere_format", func(t *testing.T) {
 		line := "data: {\"event_type\":\"text-generation\",\"is_finished\":false,\"text\":\"Hello\"}"
 		result := parseSSELine(line, "cohere", startTime, usageData)
-		if result.Event.Type != SSETypeData {
-			t.Errorf("expected SSETypeData, got %s", result.Event.Type)
+		if result.Event.Type != sseTypeData {
+			t.Errorf("expected sseTypeData, got %s", result.Event.Type)
 		}
 	})
 }
@@ -361,7 +344,7 @@ func TestRegisterChunkParser(t *testing.T) {
 	customParser := func(data []byte) (*message.StreamChunk, error) {
 		return &message.StreamChunk{}, nil
 	}
-	RegisterChunkParser("custom", customParser)
+	registerChunkParser("custom", customParser)
 
 	parser := getChunkParser("custom")
 	if parser == nil {
