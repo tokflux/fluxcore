@@ -7,16 +7,16 @@ import (
 
 func TestRetryConfig(t *testing.T) {
 	// Save original config
-	original := GetRetryConfig()
-	defer SetRetryConfig(&original) // Restore after test
+	original := getRetryConfig()
+	defer setRetryConfig(&original) // Restore after test
 
-	// Test SetRetryConfig
-	SetRetryConfig(&RetryConfig{
+	// Test setRetryConfig
+	setRetryConfig(&retryConfig{
 		BaseBackoff: 200 * time.Millisecond,
 		MaxBackoff:  10 * time.Second,
 	})
 
-	cfg := GetRetryConfig()
+	cfg := getRetryConfig()
 	if cfg.BaseBackoff != 200*time.Millisecond {
 		t.Errorf("expected BaseBackoff 200ms, got %v", cfg.BaseBackoff)
 	}
@@ -26,23 +26,23 @@ func TestRetryConfig(t *testing.T) {
 }
 
 func TestSetRetryConfigNil(t *testing.T) {
-	original := GetRetryConfig()
-	defer SetRetryConfig(&original)
+	original := getRetryConfig()
+	defer setRetryConfig(&original)
 
-	SetRetryConfig(nil) // Should be no-op
-	cfg := GetRetryConfig()
+	setRetryConfig(nil) // Should be no-op
+	cfg := getRetryConfig()
 	if cfg.BaseBackoff != original.BaseBackoff {
 		t.Error("nil config should not change values")
 	}
 }
 
 func TestSetRetryConfigZeroValues(t *testing.T) {
-	original := GetRetryConfig()
-	defer SetRetryConfig(&original)
+	original := getRetryConfig()
+	defer setRetryConfig(&original)
 
 	// Zero values should be ignored
-	SetRetryConfig(&RetryConfig{BaseBackoff: 0, MaxBackoff: 0})
-	cfg := GetRetryConfig()
+	setRetryConfig(&retryConfig{BaseBackoff: 0, MaxBackoff: 0})
+	cfg := getRetryConfig()
 	if cfg.BaseBackoff != original.BaseBackoff {
 		t.Error("zero values should be ignored")
 	}
@@ -58,10 +58,10 @@ func TestBackoffWithJitterZeroAttemptConfig(t *testing.T) {
 }
 
 func TestBackoffWithJitterBounds(t *testing.T) {
-	original := GetRetryConfig()
-	defer SetRetryConfig(&original)
+	original := getRetryConfig()
+	defer setRetryConfig(&original)
 
-	SetRetryConfig(&RetryConfig{
+	setRetryConfig(&retryConfig{
 		BaseBackoff: 100 * time.Millisecond,
 		MaxBackoff:  1 * time.Second,
 	})

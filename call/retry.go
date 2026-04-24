@@ -6,40 +6,39 @@ import (
 	"time"
 )
 
-// RetryConfig holds retry configuration.
-type RetryConfig struct {
+// retryConfig holds retry configuration (internal).
+type retryConfig struct {
 	BaseBackoff time.Duration // Base backoff duration (default: 100ms)
 	MaxBackoff  time.Duration // Maximum backoff duration (default: 5s)
 }
 
-var retryConfig = RetryConfig{
+var defaultRetryConfig = retryConfig{
 	BaseBackoff: 100 * time.Millisecond,
 	MaxBackoff:  5 * time.Second,
 }
 
 var retryConfigMu sync.RWMutex
 
-// SetRetryConfig updates the retry configuration.
-// Zero values are ignored (keep current defaults).
-func SetRetryConfig(cfg *RetryConfig) {
+// setRetryConfig updates the retry configuration (for tests).
+func setRetryConfig(cfg *retryConfig) {
 	if cfg == nil {
 		return
 	}
 	retryConfigMu.Lock()
 	defer retryConfigMu.Unlock()
 	if cfg.BaseBackoff > 0 {
-		retryConfig.BaseBackoff = cfg.BaseBackoff
+		defaultRetryConfig.BaseBackoff = cfg.BaseBackoff
 	}
 	if cfg.MaxBackoff > 0 {
-		retryConfig.MaxBackoff = cfg.MaxBackoff
+		defaultRetryConfig.MaxBackoff = cfg.MaxBackoff
 	}
 }
 
-// GetRetryConfig returns the current retry configuration.
-func GetRetryConfig() RetryConfig {
+// getRetryConfig returns the current retry configuration (for tests).
+func getRetryConfig() retryConfig {
 	retryConfigMu.RLock()
 	defer retryConfigMu.RUnlock()
-	return retryConfig
+	return defaultRetryConfig
 }
 
 // backoffWithJitter calculates exponential backoff with full jitter.
@@ -50,8 +49,8 @@ func backoffWithJitter(attempt int) time.Duration {
 	}
 
 	retryConfigMu.RLock()
-	base := retryConfig.BaseBackoff
-	maxBackoff := retryConfig.MaxBackoff
+	base := defaultRetryConfig.BaseBackoff
+	maxBackoff := defaultRetryConfig.MaxBackoff
 	retryConfigMu.RUnlock()
 
 	// Exponential backoff: base * 2^(attempt-1)
