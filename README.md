@@ -171,23 +171,6 @@ This provides smooth latency estimates that adapt gradually to changes, avoiding
 
 ---
 
-## Chinese-Aware Token Estimation
-
-```go
-// English: ~4 chars/token (standard)
-message.EstimateTokens("Hello world!")  // → 4
-
-// Chinese: ~1.5 chars/token (accurate!)
-message.EstimateTokens("你好世界")       // → 3 (not 4)
-
-// Mixed: auto-detect
-message.EstimateTokens("Hello 你好")    // → 4
-```
-
-Useful for Chinese applications where billing depends on accurate estimation.
-
----
-
 ## Usage Statistics
 
 ```go
@@ -524,23 +507,6 @@ latency := ep.LatencyEWMA() // 返回 EWMA 值（毫秒）
 | 服务不可用 (503) | 自动重试 |
 | 认证失败 (401) | 不重试，直接报错 |
 | 配额超限 (429) | 等待后重试 |
-
----
-
-### 中文智能 Token 估算
-
-```go
-// 英文: ~4 字符/token（标准）
-message.EstimateTokens("Hello world!")  // → 4
-
-// 中文: ~1.5 字符/token（精确！）
-message.EstimateTokens("你好世界")       // → 3（不是 4）
-
-// 混合: 自动检测
-message.EstimateTokens("Hello 你好")    // → 4
-```
-
-对于需要精确计费的中文应用至关重要。
 
 ---
 
