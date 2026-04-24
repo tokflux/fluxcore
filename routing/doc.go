@@ -24,7 +24,7 @@
 //	}
 //	ep := routing.NewEndpoint(1, key, "", 100) // priority=100 (lower is better)
 //	pool := routing.NewEndpointPool([]*routing.Endpoint{ep}, 3)
-//	selected := pool.Select()
+//	selected := pool.SelectBest()
 //
 // Health management:
 //

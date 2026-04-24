@@ -2,7 +2,7 @@
 //
 // The message package provides:
 //   - Protocol-agnostic request/response structures
-//   - Multimodal content support (text, image, audio)
+//   - Content types (text, image, audio)
 //   - Token usage tracking
 //   - JSON serialization with custom handling
 //
@@ -13,10 +13,8 @@
 //   - Content: Multimodal content item
 //   - Usage: Token usage statistics
 //
-// Content types:
-//   - TextContent: Plain text content
-//   - ImageContent: Image content (URL or base64)
-//   - AudioContent: Audio content (URL or base64)
+// Content construction:
+//   - TextContent(text): Create text content
 //
 // Example usage:
 //
@@ -25,13 +23,12 @@
 //	    Messages: []message.Message{
 //	        {Role: "user", Content: []message.Content{
 //	            message.TextContent("Hello"),
-//	            message.ImageContent("https://example.com/img.png", "image/png", ""),
 //	        }},
 //	    },
 //	    MaxTokens: 100,
 //	}
 //
-// Builder method:
+// Stream mode:
 //
 //	req = req.WithStream(true)
 package message
