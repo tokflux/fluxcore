@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/tokzone/fluxcore/errors"
+	"github.com/tokzone/fluxcore/provider"
 )
 
 const defaultTimeout = 30 * time.Second
@@ -29,7 +30,7 @@ var sharedClient = &http.Client{
 	},
 }
 
-func transport(ctx context.Context, ue *UserEndpoint, body []byte, client *http.Client) ([]byte, error) {
+func transport(ctx context.Context, ue *UserEndpoint, body []byte, targetProtocol provider.Protocol, client *http.Client) ([]byte, error) {
 	// Ensure requests have a deadline for timeout control
 	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
 		var cancel context.CancelFunc
@@ -37,11 +38,11 @@ func transport(ctx context.Context, ue *UserEndpoint, body []byte, client *http.
 		defer cancel()
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", buildURL(ue, false), bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", buildURL(ue, targetProtocol, false), bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
-	setHeaders(req, ue, false)
+	setHeaders(req, ue, targetProtocol, false)
 
 	resp, err := client.Do(req)
 	if err != nil {

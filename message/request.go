@@ -19,7 +19,32 @@ type MessageRequest struct {
 // Message represents a single message
 type Message struct {
 	Role    string    `json:"role"`
-	Content []Content `json:"content"`
+	Content []Content `json:"-"`
+}
+
+// MarshalJSON implements custom JSON marshaling for Message.
+// Text-only content is serialized as a plain string; mixed content as an array.
+func (m Message) MarshalJSON() ([]byte, error) {
+	if allText(m.Content) {
+		return json.Marshal(map[string]interface{}{
+			"role":    m.Role,
+			"content": ExtractAllText(m.Content),
+		})
+	}
+	return json.Marshal(map[string]interface{}{
+		"role":    m.Role,
+		"content": m.Content,
+	})
+}
+
+// allText returns true if all content items are text type.
+func allText(contents []Content) bool {
+	for _, c := range contents {
+		if !c.IsText() {
+			return false
+		}
+	}
+	return true
 }
 
 // MessageResponse is the unified response format

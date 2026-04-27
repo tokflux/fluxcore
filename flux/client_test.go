@@ -15,7 +15,7 @@ import (
 )
 
 func TestNewAPIKey(t *testing.T) {
-	prov := provider.NewProvider(1, "https://api.openai.com", provider.ProtocolOpenAI)
+	prov := provider.NewProvider(1, "https://api.openai.com")
 
 	key, err := NewAPIKey(prov, "sk-test")
 	if err != nil {
@@ -40,7 +40,7 @@ func TestNewAPIKeyNilProvider(t *testing.T) {
 }
 
 func TestNewAPIKeyEmptySecret(t *testing.T) {
-	prov := provider.NewProvider(1, "https://api.openai.com", provider.ProtocolOpenAI)
+	prov := provider.NewProvider(1, "https://api.openai.com")
 	_, err := NewAPIKey(prov, "")
 	if err == nil {
 		t.Fatal("expected error for empty secret")
@@ -48,8 +48,8 @@ func TestNewAPIKeyEmptySecret(t *testing.T) {
 }
 
 func TestNewUserEndpoint(t *testing.T) {
-	prov := provider.NewProvider(1, "https://api.openai.com", provider.ProtocolOpenAI)
-	endpoint.RegisterEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, "https://api.openai.com")
+	endpoint.RegisterEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 	key, _ := NewAPIKey(prov, "sk-test")
 
 	ue, err := NewUserEndpoint("", key, 1000)
@@ -68,7 +68,7 @@ func TestNewUserEndpoint(t *testing.T) {
 }
 
 func TestNewUserEndpointNotFound(t *testing.T) {
-	prov := provider.NewProvider(99, "https://api.notregistered.com", provider.ProtocolOpenAI)
+	prov := provider.NewProvider(99, "https://api.notregistered.com")
 	key, _ := NewAPIKey(prov, "sk-test")
 
 	_, err := NewUserEndpoint("", key, 1000)
@@ -78,10 +78,10 @@ func TestNewUserEndpointNotFound(t *testing.T) {
 }
 
 func TestNewUserEndpointMultipleProviders(t *testing.T) {
-	prov1 := provider.NewProvider(1, "https://api.openai.com", provider.ProtocolOpenAI)
-	prov2 := provider.NewProvider(2, "https://api.anthropic.com", provider.ProtocolAnthropic)
-	endpoint.RegisterEndpoint(1, prov1, "")
-	endpoint.RegisterEndpoint(2, prov2, "")
+	prov1 := provider.NewProvider(1, "https://api.openai.com")
+	prov2 := provider.NewProvider(2, "https://api.anthropic.com")
+	endpoint.RegisterEndpoint(1, prov1, "", []provider.Protocol{provider.ProtocolOpenAI})
+	endpoint.RegisterEndpoint(2, prov2, "", []provider.Protocol{provider.ProtocolOpenAI})
 
 	key1, _ := NewAPIKey(prov1, "sk-openai")
 	key2, _ := NewAPIKey(prov2, "sk-ant")
@@ -105,8 +105,8 @@ func TestNewUserEndpointMultipleProviders(t *testing.T) {
 }
 
 func TestNewClient(t *testing.T) {
-	prov := provider.NewProvider(1, "https://api.openai.com", provider.ProtocolOpenAI)
-	endpoint.RegisterEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, "https://api.openai.com")
+	endpoint.RegisterEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 	key, _ := NewAPIKey(prov, "sk-test")
 	ue, _ := NewUserEndpoint("", key, 1000)
 
@@ -120,8 +120,8 @@ func TestNewClient(t *testing.T) {
 }
 
 func TestNewClientWithOptions(t *testing.T) {
-	prov := provider.NewProvider(1, "https://api.openai.com", provider.ProtocolOpenAI)
-	endpoint.RegisterEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, "https://api.openai.com")
+	endpoint.RegisterEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 	key, _ := NewAPIKey(prov, "sk-test")
 	ue, _ := NewUserEndpoint("", key, 1000)
 
@@ -132,8 +132,8 @@ func TestNewClientWithOptions(t *testing.T) {
 }
 
 func TestClientNext(t *testing.T) {
-	prov := provider.NewProvider(1, "https://api.openai.com", provider.ProtocolOpenAI)
-	ep := endpoint.RegisterEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, "https://api.openai.com")
+	ep := endpoint.RegisterEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 	key, _ := NewAPIKey(prov, "sk-test")
 	ue, _ := NewUserEndpoint("", key, 1000)
 
@@ -169,8 +169,8 @@ func TestClientDoSuccess(t *testing.T) {
 	}))
 	defer server.Close()
 
-	prov := provider.NewProvider(1, server.URL, provider.ProtocolOpenAI)
-	endpoint.RegisterEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, server.URL)
+	endpoint.RegisterEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 	key, _ := NewAPIKey(prov, "sk-test")
 	ue, _ := NewUserEndpoint("", key, 1000)
 
@@ -209,8 +209,8 @@ func TestClientDoRetry(t *testing.T) {
 	}))
 	defer server.Close()
 
-	prov := provider.NewProvider(1, server.URL, provider.ProtocolOpenAI)
-	endpoint.RegisterEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, server.URL)
+	endpoint.RegisterEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 	key, _ := NewAPIKey(prov, "sk-test")
 	ue, _ := NewUserEndpoint("", key, 1000)
 
@@ -260,10 +260,10 @@ func TestClientPrioritySelection(t *testing.T) {
 	}))
 	defer server2.Close()
 
-	prov1 := provider.NewProvider(1, server1.URL, provider.ProtocolOpenAI)
-	prov2 := provider.NewProvider(2, server2.URL, provider.ProtocolOpenAI)
-	endpoint.RegisterEndpoint(1, prov1, "")
-	endpoint.RegisterEndpoint(2, prov2, "")
+	prov1 := provider.NewProvider(1, server1.URL)
+	prov2 := provider.NewProvider(2, server2.URL)
+	endpoint.RegisterEndpoint(1, prov1, "", []provider.Protocol{provider.ProtocolOpenAI})
+	endpoint.RegisterEndpoint(2, prov2, "", []provider.Protocol{provider.ProtocolOpenAI})
 
 	key1, _ := NewAPIKey(prov1, "sk-1")
 	key2, _ := NewAPIKey(prov2, "sk-2")
@@ -325,8 +325,8 @@ func TestClientDoRetryExhausted(t *testing.T) {
 	}))
 	defer server.Close()
 
-	prov := provider.NewProvider(1, server.URL, provider.ProtocolOpenAI)
-	endpoint.RegisterEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, server.URL)
+	endpoint.RegisterEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 	key, _ := NewAPIKey(prov, "sk-test")
 	ue, _ := NewUserEndpoint("", key, 1000)
 
@@ -349,8 +349,8 @@ func TestClientDoTimeout(t *testing.T) {
 	}))
 	defer server.Close()
 
-	prov := provider.NewProvider(1, server.URL, provider.ProtocolOpenAI)
-	endpoint.RegisterEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, server.URL)
+	endpoint.RegisterEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 	key, _ := NewAPIKey(prov, "sk-test")
 	ue, _ := NewUserEndpoint("", key, 1000)
 
@@ -378,8 +378,8 @@ func TestClientDoStream(t *testing.T) {
 	}))
 	defer server.Close()
 
-	prov := provider.NewProvider(1, server.URL, provider.ProtocolOpenAI)
-	endpoint.RegisterEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, server.URL)
+	endpoint.RegisterEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 	key, _ := NewAPIKey(prov, "sk-test")
 	ue, _ := NewUserEndpoint("", key, 1000)
 
@@ -455,8 +455,8 @@ func TestIsProviderError(t *testing.T) {
 }
 
 func TestClientFeedback(t *testing.T) {
-	prov := provider.NewProvider(1, "https://api.openai.com", provider.ProtocolOpenAI)
-	ep := endpoint.RegisterEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, "https://api.openai.com")
+	ep := endpoint.RegisterEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 	key, _ := NewAPIKey(prov, "sk-test")
 	ue, _ := NewUserEndpoint("", key, 1000)
 
@@ -477,8 +477,8 @@ func TestClientFeedback(t *testing.T) {
 }
 
 func TestClientIsHealthy(t *testing.T) {
-	prov := provider.NewProvider(1, "https://api.openai.com", provider.ProtocolOpenAI)
-	endpoint.RegisterEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, "https://api.openai.com")
+	endpoint.RegisterEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 	key, _ := NewAPIKey(prov, "sk-test")
 	ue, _ := NewUserEndpoint("", key, 1000)
 
@@ -489,15 +489,15 @@ func TestClientIsHealthy(t *testing.T) {
 	}
 
 	// Test unregistered endpoint
-	unregistered := provider.NewProvider(99, "https://api.unknown.com", provider.ProtocolOpenAI)
+	unregistered := provider.NewProvider(99, "https://api.unknown.com")
 	if client.IsHealthy(unregistered, "") {
 		t.Error("unregistered endpoint should not be healthy")
 	}
 }
 
 func TestClientLatency(t *testing.T) {
-	prov := provider.NewProvider(1, "https://api.openai.com", provider.ProtocolOpenAI)
-	ep := endpoint.RegisterEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, "https://api.openai.com")
+	ep := endpoint.RegisterEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 	key, _ := NewAPIKey(prov, "sk-test")
 	ue, _ := NewUserEndpoint("", key, 1000)
 
@@ -529,8 +529,8 @@ func TestClientDoStreamTimeout(t *testing.T) {
 	}))
 	defer server.Close()
 
-	prov := provider.NewProvider(1, server.URL, provider.ProtocolOpenAI)
-	endpoint.RegisterEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, server.URL)
+	endpoint.RegisterEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 	key, _ := NewAPIKey(prov, "sk-test")
 	ue, _ := NewUserEndpoint("", key, 1000)
 
@@ -565,8 +565,8 @@ func TestClientDoStreamError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	prov := provider.NewProvider(1, server.URL, provider.ProtocolOpenAI)
-	endpoint.RegisterEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, server.URL)
+	endpoint.RegisterEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 	key, _ := NewAPIKey(prov, "sk-test")
 	ue, _ := NewUserEndpoint("", key, 1000)
 
@@ -591,8 +591,8 @@ func TestClientConcurrentRequests(t *testing.T) {
 	}))
 	defer server.Close()
 
-	prov := provider.NewProvider(1, server.URL, provider.ProtocolOpenAI)
-	endpoint.RegisterEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, server.URL)
+	endpoint.RegisterEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 	key, _ := NewAPIKey(prov, "sk-test")
 	ue, _ := NewUserEndpoint("", key, 1000)
 
@@ -624,8 +624,8 @@ func TestClientConcurrentRequests(t *testing.T) {
 }
 
 func TestClientFeedbackProviderFail(t *testing.T) {
-	prov := provider.NewProvider(1, "https://api.openai.com", provider.ProtocolOpenAI)
-	ep := endpoint.RegisterEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, "https://api.openai.com")
+	ep := endpoint.RegisterEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 	key, _ := NewAPIKey(prov, "sk-test")
 	ue, _ := NewUserEndpoint("", key, 1000)
 
@@ -658,8 +658,8 @@ func TestClientDoNonRetryableError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	prov := provider.NewProvider(1, server.URL, provider.ProtocolOpenAI)
-	endpoint.RegisterEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, server.URL)
+	endpoint.RegisterEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 	key, _ := NewAPIKey(prov, "sk-test")
 	ue, _ := NewUserEndpoint("", key, 1000)
 
@@ -690,8 +690,8 @@ func TestClientDoRateLimitRetry(t *testing.T) {
 	}))
 	defer server.Close()
 
-	prov := provider.NewProvider(1, server.URL, provider.ProtocolOpenAI)
-	endpoint.RegisterEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, server.URL)
+	endpoint.RegisterEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 	key, _ := NewAPIKey(prov, "sk-test")
 	ue, _ := NewUserEndpoint("", key, 1000)
 
@@ -713,8 +713,8 @@ func TestClientDoRateLimitRetry(t *testing.T) {
 }
 
 func TestUserEndpointMethods(t *testing.T) {
-	prov := provider.NewProvider(1, "https://api.openai.com", provider.ProtocolOpenAI)
-	ep := endpoint.RegisterEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, "https://api.openai.com")
+	ep := endpoint.RegisterEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 	key, _ := NewAPIKey(prov, "sk-test")
 	ue, _ := NewUserEndpoint("", key, 1000)
 
@@ -753,10 +753,10 @@ func TestClientNextFallback(t *testing.T) {
 	}))
 	defer server2.Close()
 
-	prov1 := provider.NewProvider(1, server1.URL, provider.ProtocolOpenAI)
-	prov2 := provider.NewProvider(2, server2.URL, provider.ProtocolOpenAI)
-	ep1 := endpoint.RegisterEndpoint(1, prov1, "")
-	ep2 := endpoint.RegisterEndpoint(2, prov2, "")
+	prov1 := provider.NewProvider(1, server1.URL)
+	prov2 := provider.NewProvider(2, server2.URL)
+	ep1 := endpoint.RegisterEndpoint(1, prov1, "", []provider.Protocol{provider.ProtocolOpenAI})
+	ep2 := endpoint.RegisterEndpoint(2, prov2, "", []provider.Protocol{provider.ProtocolOpenAI})
 
 	key1, _ := NewAPIKey(prov1, "sk-1")
 	key2, _ := NewAPIKey(prov2, "sk-2")
@@ -802,8 +802,8 @@ func TestClientRefreshCache(t *testing.T) {
 	}))
 	defer server.Close()
 
-	prov := provider.NewProvider(1, server.URL, provider.ProtocolOpenAI)
-	endpoint.RegisterEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, server.URL)
+	endpoint.RegisterEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 	key, _ := NewAPIKey(prov, "sk-test")
 	ue, _ := NewUserEndpoint("", key, 1000)
 
@@ -826,8 +826,8 @@ func TestClientDoInvalidRequest(t *testing.T) {
 	}))
 	defer server.Close()
 
-	prov := provider.NewProvider(1, server.URL, provider.ProtocolOpenAI)
-	endpoint.RegisterEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, server.URL)
+	endpoint.RegisterEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 	key, _ := NewAPIKey(prov, "sk-test")
 	ue, _ := NewUserEndpoint("", key, 1000)
 
@@ -845,7 +845,7 @@ func TestClientDoInvalidRequest(t *testing.T) {
 }
 
 func TestAPIKeyMethods(t *testing.T) {
-	prov := provider.NewProvider(1, "https://api.openai.com", provider.ProtocolOpenAI)
+	prov := provider.NewProvider(1, "https://api.openai.com")
 	key, _ := NewAPIKey(prov, "sk-test123")
 
 	if key.Provider() != prov {
@@ -886,8 +886,8 @@ func TestClientDoSuccessWithUsage(t *testing.T) {
 	}))
 	defer server.Close()
 
-	prov := provider.NewProvider(1, server.URL, provider.ProtocolOpenAI)
-	ep := endpoint.RegisterEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, server.URL)
+	ep := endpoint.RegisterEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 	key, _ := NewAPIKey(prov, "sk-test")
 	ue, _ := NewUserEndpoint("", key, 1000)
 

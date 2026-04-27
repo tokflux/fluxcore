@@ -32,42 +32,69 @@ type Content struct {
 }
 
 // MarshalJSON implements custom JSON marshaling for Content.
+// Uses OpenAI-compatible field names: "text" for text type, "image_url" for images.
 func (c Content) MarshalJSON() ([]byte, error) {
-	type jsonContent struct {
-		Type string      `json:"type"`
-		Data interface{} `json:"data"`
-	}
-	jc := jsonContent{Type: c.Type}
 	switch d := c.Data.(type) {
 	case TextData:
-		jc.Data = string(d)
+		return json.Marshal(map[string]interface{}{
+			"type": c.Type,
+			"text": string(d),
+		})
 	case MediaData:
-		jc.Data = d
+		key := "image_url"
+		if c.Type == "audio" {
+			key = "input_audio"
+		}
+		return json.Marshal(map[string]interface{}{
+			"type": c.Type,
+			key: map[string]interface{}{
+				"url":    d.URL,
+				"detail": d.MediaType,
+			},
+		})
 	}
-	return json.Marshal(jc)
+	return json.Marshal(map[string]interface{}{
+		"type": c.Type,
+	})
 }
 
 // UnmarshalJSON implements custom JSON unmarshaling for Content.
+// Accepts both OpenAI wire format ("text"/"image_url") and legacy IR format ("data").
 func (c *Content) UnmarshalJSON(data []byte) error {
-	type jsonContent struct {
+	var raw struct {
 		Type string          `json:"type"`
-		Data json.RawMessage `json:"data"`
+		Data json.RawMessage `json:"data,omitempty"`
+		Text json.RawMessage `json:"text,omitempty"`
+		URL  json.RawMessage `json:"image_url,omitempty"`
+		Aud  json.RawMessage `json:"input_audio,omitempty"`
 	}
-	var jc jsonContent
-	if err := json.Unmarshal(data, &jc); err != nil {
+	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
-	c.Type = jc.Type
-	switch jc.Type {
+	c.Type = raw.Type
+	switch raw.Type {
 	case "text":
+		// Try "text" field first (OpenAI format), then "data" (legacy)
+		field := raw.Text
+		if field == nil {
+			field = raw.Data
+		}
 		var text string
-		if err := json.Unmarshal(jc.Data, &text); err != nil {
+		if err := json.Unmarshal(field, &text); err != nil {
 			return err
 		}
 		c.Data = TextData(text)
 	case "image", "audio":
+		// Try OpenAI format fields first, then legacy "data"
+		field := raw.URL
+		if field == nil {
+			field = raw.Aud
+		}
+		if field == nil {
+			field = raw.Data
+		}
 		var media MediaData
-		if err := json.Unmarshal(jc.Data, &media); err != nil {
+		if err := json.Unmarshal(field, &media); err != nil {
 			return err
 		}
 		c.Data = media

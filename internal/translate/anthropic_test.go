@@ -147,6 +147,70 @@ func TestAnthropicSSEConversion(t *testing.T) {
 	}
 }
 
+func TestAnthropicSystemArrayParsing(t *testing.T) {
+	// system as array (Anthropic API v2023-06-01+ with multiple system blocks)
+	anthropicReq := map[string]interface{}{
+		"model":      "claude-3",
+		"max_tokens": 100,
+		"system": []interface{}{
+			map[string]interface{}{
+				"type": "text",
+				"text": "You are a helpful assistant.",
+			},
+			map[string]interface{}{
+				"type": "text",
+				"text": "Always respond in JSON.",
+			},
+		},
+		"messages": []interface{}{
+			map[string]interface{}{
+				"role":    "user",
+				"content": "Hello",
+			},
+		},
+	}
+
+	reqBytes, _ := json.Marshal(anthropicReq)
+	req, err := AnthropicToMessageRequest(bytes.NewReader(reqBytes))
+	if err != nil {
+		t.Fatalf("AnthropicToMessageRequest failed: %v", err)
+	}
+
+	// Should have 2 system messages + 1 user = 3
+	if len(req.Messages) != 3 {
+		t.Errorf("expected 3 messages (2 system + 1 user), got %d", len(req.Messages))
+	}
+
+	if req.Messages[0].Role != "system" {
+		t.Errorf("expected first message to be system, got %s", req.Messages[0].Role)
+	}
+}
+
+func TestAnthropicSystemStringParsing(t *testing.T) {
+	// system as string (legacy format)
+	anthropicReq := map[string]interface{}{
+		"model":      "claude-3",
+		"max_tokens": 100,
+		"system":     "You are helpful.",
+		"messages": []interface{}{
+			map[string]interface{}{
+				"role":    "user",
+				"content": "Hello",
+			},
+		},
+	}
+
+	reqBytes, _ := json.Marshal(anthropicReq)
+	req, err := AnthropicToMessageRequest(bytes.NewReader(reqBytes))
+	if err != nil {
+		t.Fatalf("AnthropicToMessageRequest failed: %v", err)
+	}
+
+	if len(req.Messages) != 2 {
+		t.Errorf("expected 2 messages (1 system + 1 user), got %d", len(req.Messages))
+	}
+}
+
 func TestAnthropicContentArrayParsing(t *testing.T) {
 	anthropicReq := map[string]interface{}{
 		"model": "claude-3",
@@ -184,4 +248,78 @@ func TestAnthropicContentArrayParsing(t *testing.T) {
 	if len(req.Messages[0].Content) == 0 {
 		t.Error("expected content to be extracted")
 	}
+}
+
+func TestParseAnthropicChunk(t *testing.T) {
+	t.Run("content_block_delta", func(t *testing.T) {
+		data := []byte(`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`)
+		chunk, err := parseAnthropicChunk(data)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if chunk == nil {
+			t.Fatal("expected non-nil chunk")
+		}
+		if len(chunk.Choices) != 1 {
+			t.Fatalf("expected 1 choice, got %d", len(chunk.Choices))
+		}
+		text := message.ExtractAllText(chunk.Choices[0].Delta.Content)
+		if text != "Hello" {
+			t.Errorf("expected text 'Hello', got '%s'", text)
+		}
+	})
+
+	t.Run("content_block_delta_non_text", func(t *testing.T) {
+		data := []byte(`{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{}"}}`)
+		chunk, err := parseAnthropicChunk(data)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if chunk == nil {
+			t.Fatal("expected non-nil chunk")
+		}
+		text := message.ExtractAllText(chunk.Choices[0].Delta.Content)
+		if text != "" {
+			t.Errorf("expected empty text for non-text delta, got '%s'", text)
+		}
+	})
+
+	t.Run("message_delta", func(t *testing.T) {
+		data := []byte(`{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":10}}`)
+		chunk, err := parseAnthropicChunk(data)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if chunk == nil {
+			t.Fatal("expected non-nil chunk")
+		}
+		if chunk.Choices[0].FinishReason == nil || *chunk.Choices[0].FinishReason != "end_turn" {
+			t.Error("expected finish_reason end_turn")
+		}
+	})
+
+	t.Run("message_start", func(t *testing.T) {
+		data := []byte(`{"type":"message_start","message":{"id":"msg_123","model":"claude-3","role":"assistant"}}`)
+		chunk, err := parseAnthropicChunk(data)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if chunk == nil {
+			t.Fatal("expected non-nil chunk")
+		}
+		if chunk.Choices[0].Delta.Role != "assistant" {
+			t.Errorf("expected role 'assistant', got '%s'", chunk.Choices[0].Delta.Role)
+		}
+	})
+
+	t.Run("unknown_type", func(t *testing.T) {
+		data := []byte(`{"type":"ping"}`)
+		chunk, err := parseAnthropicChunk(data)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if chunk != nil {
+			t.Error("expected nil chunk for unknown event type")
+		}
+	})
 }

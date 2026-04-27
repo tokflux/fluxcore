@@ -7,9 +7,9 @@ import (
 )
 
 func TestNewEndpoint(t *testing.T) {
-	prov := provider.NewProvider(1, "https://api.openai.com", provider.ProtocolOpenAI)
+	prov := provider.NewProvider(1, "https://api.openai.com")
 
-	ep, err := NewEndpoint(1, prov, "")
+	ep, err := NewEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -28,16 +28,16 @@ func TestNewEndpoint(t *testing.T) {
 }
 
 func TestNewEndpointNilProvider(t *testing.T) {
-	_, err := NewEndpoint(1, nil, "")
+	_, err := NewEndpoint(1, nil, "", []provider.Protocol{provider.ProtocolOpenAI})
 	if err == nil {
 		t.Fatal("expected error for nil provider")
 	}
 }
 
 func TestNewEndpointWithModel(t *testing.T) {
-	prov := provider.NewProvider(1, "https://generativelanguage.googleapis.com", provider.ProtocolGemini)
+	prov := provider.NewProvider(1, "https://generativelanguage.googleapis.com")
 
-	ep, err := NewEndpoint(1, prov, "gemini-pro")
+	ep, err := NewEndpoint(1, prov, "gemini-pro", []provider.Protocol{provider.ProtocolGemini})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -47,8 +47,8 @@ func TestNewEndpointWithModel(t *testing.T) {
 }
 
 func TestEndpointIsAvailable(t *testing.T) {
-	prov := provider.NewProvider(1, "https://api.openai.com", provider.ProtocolOpenAI)
-	ep, _ := NewEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, "https://api.openai.com")
+	ep, _ := NewEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 
 	// Initially available
 	if !ep.IsAvailable() {
@@ -79,8 +79,8 @@ func TestEndpointIsAvailable(t *testing.T) {
 }
 
 func TestEndpointCircuitBreaker(t *testing.T) {
-	prov := provider.NewProvider(1, "https://api.openai.com", provider.ProtocolOpenAI)
-	ep, _ := NewEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, "https://api.openai.com")
+	ep, _ := NewEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 
 	if ep.IsCircuitBreakerOpen() {
 		t.Error("expected circuit breaker closed initially")
@@ -97,8 +97,8 @@ func TestEndpointCircuitBreaker(t *testing.T) {
 }
 
 func TestEndpointLatencyEWMA(t *testing.T) {
-	prov := provider.NewProvider(1, "https://api.openai.com", provider.ProtocolOpenAI)
-	ep, _ := NewEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, "https://api.openai.com")
+	ep, _ := NewEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 
 	// Initial latency should be 0
 	if ep.EndpointLatencyEWMA() != 0 {
@@ -119,8 +119,8 @@ func TestEndpointLatencyEWMA(t *testing.T) {
 }
 
 func TestEndpointProtocol(t *testing.T) {
-	prov := provider.NewProvider(1, "https://api.anthropic.com", provider.ProtocolAnthropic)
-	ep, _ := NewEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, "https://api.anthropic.com")
+	ep, _ := NewEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolAnthropic})
 
 	if ep.Protocol() != provider.ProtocolAnthropic {
 		t.Errorf("expected ProtocolAnthropic, got %v", ep.Protocol())
@@ -128,8 +128,8 @@ func TestEndpointProtocol(t *testing.T) {
 }
 
 func TestEndpointBaseURL(t *testing.T) {
-	prov := provider.NewProvider(1, "https://api.openai.com", provider.ProtocolOpenAI)
-	ep, _ := NewEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, "https://api.openai.com")
+	ep, _ := NewEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 
 	if ep.BaseURL() != "https://api.openai.com" {
 		t.Errorf("expected https://api.openai.com, got %s", ep.BaseURL())
@@ -137,8 +137,8 @@ func TestEndpointBaseURL(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
-	prov := provider.NewProvider(1, "https://api.openai.com", provider.ProtocolOpenAI)
-	ep, _ := NewEndpoint(1, prov, "")
+	prov := provider.NewProvider(1, "https://api.openai.com")
+	ep, _ := NewEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolOpenAI})
 
 	if err := ep.Validate(); err != nil {
 		t.Errorf("unexpected validation error: %v", err)
@@ -146,8 +146,8 @@ func TestValidate(t *testing.T) {
 }
 
 func TestValidateGeminiRequiresModel(t *testing.T) {
-	prov := provider.NewProvider(1, "https://generativelanguage.googleapis.com", provider.ProtocolGemini)
-	ep, _ := NewEndpoint(1, prov, "") // Empty model
+	prov := provider.NewProvider(1, "https://generativelanguage.googleapis.com")
+	ep, _ := NewEndpoint(1, prov, "", []provider.Protocol{provider.ProtocolGemini}) // Empty model
 
 	if err := ep.Validate(); err == nil {
 		t.Fatal("expected validation error for Gemini without model")
@@ -155,8 +155,8 @@ func TestValidateGeminiRequiresModel(t *testing.T) {
 }
 
 func TestValidateGeminiWithModel(t *testing.T) {
-	prov := provider.NewProvider(1, "https://generativelanguage.googleapis.com", provider.ProtocolGemini)
-	ep, _ := NewEndpoint(1, prov, "gemini-pro")
+	prov := provider.NewProvider(1, "https://generativelanguage.googleapis.com")
+	ep, _ := NewEndpoint(1, prov, "gemini-pro", []provider.Protocol{provider.ProtocolGemini})
 
 	if err := ep.Validate(); err != nil {
 		t.Errorf("unexpected validation error: %v", err)

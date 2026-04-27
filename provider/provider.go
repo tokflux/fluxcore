@@ -28,21 +28,19 @@ func (p Protocol) String() string {
 }
 
 // Provider represents a LLM API provider (global singleton).
-// A provider is identified by its BaseURL and Protocol.
+// A provider is identified by its BaseURL.
 type Provider struct {
-	ID       uint
-	BaseURL  string
-	Protocol Protocol             // Protocol format (OpenAI, Anthropic, Gemini, Cohere)
-	state    *ProviderHealthState // Network-layer health + latency
+	ID      uint
+	BaseURL string
+	state   *ProviderHealthState // Network-layer health + latency
 }
 
 // NewProvider creates a new provider with default healthy state.
-func NewProvider(id uint, baseURL string, protocol Protocol) *Provider {
+func NewProvider(id uint, baseURL string) *Provider {
 	return &Provider{
-		ID:       id,
-		BaseURL:  baseURL,
-		Protocol: protocol,
-		state:    newProviderHealthState(),
+		ID:      id,
+		BaseURL: baseURL,
+		state:   newProviderHealthState(),
 	}
 }
 

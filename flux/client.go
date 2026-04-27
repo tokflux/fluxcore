@@ -1,7 +1,9 @@
 package flux
 
 import (
+	"context"
 	stderrors "errors"
+	"log"
 	"math/rand"
 	"net/http"
 	"slices"
@@ -10,11 +12,21 @@ import (
 
 	"github.com/tokzone/fluxcore/endpoint"
 	"github.com/tokzone/fluxcore/errors"
+	"github.com/tokzone/fluxcore/message"
 	"github.com/tokzone/fluxcore/provider"
 )
 
+// DoFunc is a pre-prepared execution function. It encapsulates the full request lifecycle:
+// endpoint selection, protocol translation, HTTP transport, and health feedback.
+// Input protocol is baked into the closure at generation time via DoFuncGen.
+// Returns: response body, usage, provider URL (for logging), and error.
+type DoFunc func(ctx context.Context, body []byte) ([]byte, *message.Usage, string, error)
+
+// StreamDoFunc is the streaming counterpart of DoFunc.
+// Returns: stream result, model name, provider URL, and error.
+type StreamDoFunc func(ctx context.Context, body []byte) (*StreamResult, string, string, error)
+
 // Client manages user endpoint selection with health awareness.
-// Client provides a simple API: Do() and DoStream(), hiding all internal complexity.
 type Client struct {
 	userEndpoints []*UserEndpoint // Pre-sorted by priority
 	retryMax      int
@@ -223,3 +235,171 @@ func backoffWithJitter(attempt int) time.Duration {
 	// Full jitter: random value between 0 and backoff
 	return time.Duration(rand.Float64() * float64(backoff))
 }
+
+// buildProtoSelector pre-computes the target protocol for each endpoint and returns
+// a protoMap plus a next() wrapper that bundles endpoint selection with protocol lookup.
+func (c *Client) buildProtoSelector(inputProtocol provider.Protocol) (map[*UserEndpoint]provider.Protocol, func() (*UserEndpoint, provider.Protocol)) {
+	protoMap := make(map[*UserEndpoint]provider.Protocol, len(c.userEndpoints))
+	for _, ue := range c.userEndpoints {
+		protoMap[ue] = ue.SelectProtocol(inputProtocol)
+	}
+	next := func() (*UserEndpoint, provider.Protocol) {
+		ue := c.Next()
+		if ue == nil {
+			return nil, 0
+		}
+		return ue, protoMap[ue]
+	}
+	return protoMap, next
+}
+
+// DoFuncGen generates a pre-prepared DoFunc with the given input protocol baked in.
+// For each endpoint in the client, the target (output) protocol is pre-computed via
+// SelectProtocol, and stored in a protoMap. The returned DoFunc closure has zero
+// protocol decision overhead on the hot path.
+func DoFuncGen(client *Client, inputProtocol provider.Protocol) DoFunc {
+	_, next := client.buildProtoSelector(inputProtocol)
+
+	return func(ctx context.Context, body []byte) ([]byte, *message.Usage, string, error) {
+		req, err := parseRequest(body, inputProtocol)
+		if err != nil {
+			return nil, nil, "", err
+		}
+
+		var lastErr error
+		retryMax := client.RetryMax()
+
+		for retry := 0; retry <= retryMax; retry++ {
+			ue, targetProtocol := next()
+			if ue == nil {
+				break
+			}
+
+			if retry > 0 {
+				backoff := backoffWithJitter(retry)
+				select {
+				case <-time.After(backoff):
+				case <-ctx.Done():
+					return nil, nil, "", ctx.Err()
+				}
+			}
+
+			start := time.Now()
+			resp, usage, err := doWithParsedRequest(ctx, ue, req, targetProtocol, inputProtocol, client.httpClient)
+			latencyMs := int(time.Since(start).Milliseconds())
+
+			if err == nil {
+				client.Feedback(ue, nil, latencyMs)
+				return resp, usage, ue.BaseURL(), nil
+			}
+
+			lastErr = err
+			client.Feedback(ue, err, 0)
+
+			if !errors.IsRetryable(err) {
+				break
+			}
+		}
+
+		if lastErr != nil {
+			return nil, nil, "", lastErr
+		}
+		return nil, nil, "", errNoEndpoints
+	}
+}
+
+// StreamDoFuncGen generates a pre-prepared streaming DoFunc with the given input protocol baked in.
+func StreamDoFuncGen(client *Client, inputProtocol provider.Protocol) StreamDoFunc {
+	_, next := client.buildProtoSelector(inputProtocol)
+
+	return func(ctx context.Context, body []byte) (*StreamResult, string, string, error) {
+		req, err := parseRequest(body, inputProtocol)
+		if err != nil {
+			return nil, "", "", err
+		}
+		req = req.WithStream(true)
+
+		var lastErr error
+		retryMax := client.RetryMax()
+
+		for retry := 0; retry <= retryMax; retry++ {
+			ue, targetProtocol := next()
+			if ue == nil {
+				break
+			}
+
+			if retry > 0 {
+				backoff := backoffWithJitter(retry)
+				select {
+				case <-time.After(backoff):
+				case <-ctx.Done():
+					return nil, "", "", ctx.Err()
+				}
+			}
+
+			start := time.Now()
+			result, err := doStreamWithParsedRequest(ctx, ue, req, targetProtocol, inputProtocol, client.httpClient)
+
+			if err == nil {
+				// Wrap the result channel to track success on completion
+				wrappedCh := make(chan []byte, defaultWrappedChannelBuffer)
+				wrappedResult := &StreamResult{
+					Ch:     wrappedCh,
+					Usage:  result.Usage,
+					Error:  result.Error,
+					cancel: result.cancel,
+				}
+
+				go func() {
+					defer func() {
+						if r := recover(); r != nil {
+							log.Printf("[fluxcore] stream wrapper panic recovered: %v", r)
+						}
+					}()
+					defer close(wrappedCh)
+					defer result.Close()
+
+					for {
+						select {
+						case chunk, ok := <-result.Ch:
+							if !ok {
+								latencyMs := int(time.Since(start).Milliseconds())
+								if result.Error() == nil {
+									client.Feedback(ue, nil, latencyMs)
+								} else {
+									client.Feedback(ue, result.Error(), 0)
+								}
+								return
+							}
+							select {
+							case wrappedCh <- chunk:
+							case <-ctx.Done():
+								client.Feedback(ue, ctx.Err(), 0)
+								return
+							}
+						case <-ctx.Done():
+							client.Feedback(ue, ctx.Err(), 0)
+							return
+						}
+					}
+				}()
+
+				return wrappedResult, ue.Model(), ue.BaseURL(), nil
+			}
+
+			lastErr = err
+			client.Feedback(ue, err, 0)
+
+			if !errors.IsRetryable(err) {
+				break
+			}
+		}
+
+		if lastErr != nil {
+			return nil, "", "", lastErr
+		}
+		return nil, "", "", errNoEndpoints
+	}
+}
+
+var errNoEndpoints = errors.Wrap(errors.CodeNoEndpoint, "no available endpoints", nil)

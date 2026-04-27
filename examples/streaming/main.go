@@ -13,10 +13,10 @@ import (
 
 func main() {
 	// 1. Define global provider
-	openai := provider.NewProvider(1, "https://api.openai.com", provider.ProtocolOpenAI)
+	openai := provider.NewProvider(1, "https://api.openai.com")
 
 	// 2. Register endpoint to global registry
-	endpoint.RegisterEndpoint(1, openai, "")
+	endpoint.RegisterEndpoint(1, openai, "", []provider.Protocol{provider.ProtocolOpenAI})
 
 	// 3. Create APIKey (Provider + Secret)
 	key, err := flux.NewAPIKey(openai, "sk-your-api-key")

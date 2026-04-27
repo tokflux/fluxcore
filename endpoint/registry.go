@@ -61,8 +61,8 @@ func (r *Registry) Clear() {
 	r.byProvModel = sync.Map{}
 }
 
-func RegisterEndpoint(id uint, prov *provider.Provider, model string) *Endpoint {
-	ep, err := NewEndpoint(id, prov, model)
+func RegisterEndpoint(id uint, prov *provider.Provider, model string, protocols []provider.Protocol) *Endpoint {
+	ep, err := NewEndpoint(id, prov, model, protocols)
 	if err != nil {
 		return nil
 	}

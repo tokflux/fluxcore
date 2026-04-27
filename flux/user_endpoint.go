@@ -99,6 +99,11 @@ func (ue *UserEndpoint) Protocol() provider.Protocol {
 	return ue.endpoint.Protocol()
 }
 
+// SelectProtocol returns the matching protocol if the endpoint supports it, otherwise the default.
+func (ue *UserEndpoint) SelectProtocol(input provider.Protocol) provider.Protocol {
+	return ue.endpoint.SelectProtocol(input)
+}
+
 func (ue *UserEndpoint) BaseURL() string {
 	return ue.endpoint.BaseURL()
 }

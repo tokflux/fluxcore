@@ -15,18 +15,18 @@
 
 ```go
 import (
-    "github.com/tokzone/fluxcore/provider"
     "github.com/tokzone/fluxcore/endpoint"
     "github.com/tokzone/fluxcore/flux"
+    "github.com/tokzone/fluxcore/provider"
 )
 
-// 1. 定义全局 Provider
-openai := provider.NewProvider(1, "https://api.openai.com", provider.ProtocolOpenAI)
-anthropic := provider.NewProvider(2, "https://api.anthropic.com", provider.ProtocolAnthropic)
+// 1. 定义 Provider（仅 BaseURL，不绑协议）
+openai := provider.NewProvider(1, "https://api.openai.com")
+anthropic := provider.NewProvider(2, "https://api.anthropic.com")
 
-// 2. 注册 Endpoint 到全局 Registry
-endpoint.RegisterEndpoint(1, openai, "")
-endpoint.RegisterEndpoint(2, anthropic, "")
+// 2. 注册 Endpoint 到全局 Registry（带协议能力列表）
+endpoint.RegisterEndpoint(1, openai, "", []provider.Protocol{provider.ProtocolOpenAI})
+endpoint.RegisterEndpoint(2, anthropic, "", []provider.Protocol{provider.ProtocolAnthropic})
 
 // 3. 创建 APIKey（Provider + Secret）
 key1, _ := flux.NewAPIKey(openai, "sk-xxx")
@@ -36,20 +36,18 @@ key2, _ := flux.NewAPIKey(anthropic, "sk-ant-xxx")
 ue1, _ := flux.NewUserEndpoint("", key1, 1000)
 ue2, _ := flux.NewUserEndpoint("", key2, 800)
 
-// 5. 创建 Client（默认 HTTP Client）
+// 5. 创建 Client
 client := flux.NewClient([]*flux.UserEndpoint{ue1, ue2}, flux.WithRetryMax(3))
 
-// 或自定义 HTTP Client
-customHTTP := &http.Client{Timeout: 60 * time.Second}
-client := flux.NewClient([]*flux.UserEndpoint{ue1, ue2}, 
-    flux.WithRetryMax(3),
-    flux.WithHTTPClient(customHTTP))
+// 6. 生成预编译 DoFunc（输入端协议闭包固化，热路径零开销）
+doFunc := flux.DoFuncGen(client, provider.ProtocolOpenAI)
 
-// 6. 发送请求
-resp, usage, err := client.Do(ctx, rawReq, provider.ProtocolOpenAI)
+// 7. 发送请求
+resp, usage, providerURL, err := doFunc(ctx, rawReq)
 
-// 7. 流式请求
-result, err := client.DoStream(ctx, rawReq, provider.ProtocolAnthropic)
+// 8. 流式请求
+streamDoFunc := flux.StreamDoFuncGen(client, provider.ProtocolAnthropic)
+result, model, providerURL, err := streamDoFunc(ctx, rawReq)
 defer result.Close()
 for chunk := range result.Ch {
     // 处理 chunk
@@ -58,12 +56,56 @@ for chunk := range result.Ch {
 
 ---
 
+## 核心概念
+
+### Provider（协议无关）
+
+Provider 仅由 BaseURL 标识。协议**不是** Provider 的属性 — 像 DeepSeek 或 OpenRouter 这样的 Provider 同时支持多种协议（OpenAI + Anthropic）。
+
+```go
+prov := provider.NewProvider(id, "https://api.deepseek.com")
+```
+
+### Endpoint = (Provider, Model) + 协议能力列表
+
+Endpoint 通过 `Protocols []Protocol` 声明所支持的协议。协议是**能力**而非身份。
+
+```go
+ep, _ := endpoint.NewEndpoint(1, prov, "deepseek-chat",
+    []provider.Protocol{provider.ProtocolOpenAI, provider.ProtocolAnthropic})
+
+// 检测能力
+ep.HasProtocol(provider.ProtocolAnthropic) // true
+
+// 最佳匹配（命中则直传，未命中则回退到 Protocols[0]）
+target := ep.SelectProtocol(provider.ProtocolAnthropic) // ProtocolAnthropic
+target := ep.SelectProtocol(provider.ProtocolGemini)    // ProtocolOpenAI（回退）
+```
+
+### DoFunc / DoFuncGen — Prepare/Do 分离
+
+`DoFuncGen(client, inputProtocol)` 预计算每个 endpoint 的目标协议映射，返回 `DoFunc` 闭包。热路径**零协议判断开销**。
+
+```go
+// 启动/reload 时生成一次 — 输入端协议固化在闭包中
+openAIDoFunc := flux.DoFuncGen(client, provider.ProtocolOpenAI)
+
+// 热路径 — 无需传 protocol 参数
+resp, usage, providerURL, err := openAIDoFunc(ctx, body)
+```
+
+`Client.Do()` 和 `Client.DoStream()` 已**废弃** — 推荐使用 `DoFuncGen` / `StreamDoFuncGen`。
+
+---
+
 ## 特性
 
 - **简洁 API** — Provider、Endpoint、APIKey、UserEndpoint、Client。五个概念。
+- **协议无关 Provider** — Provider 仅为 BaseURL；协议由 Endpoint 以能力列表声明。
 - **多租户** — 共享健康状态（Provider/Endpoint），私有密钥（APIKey）和优先级（UserEndpoint）。
 - **双层健康** — Provider（网络）+ Endpoint（模型）熔断器。
-- **协议转换** — Anthropic 输入，Gemini 输出，透明转换。
+- **协议转换** — Anthropic 入，Gemini 出。通过 `SelectProtocol` 回退实现透明协议转换。
+- **Prepare/Do 分离** — `DoFuncGen` 在生成时固化输入端协议；热路径零协议开销。
 - **自定义 HTTP Client** — 注入自定义 Client 调整连接池参数。
 
 ---
@@ -92,7 +134,8 @@ flux.WithHTTPClient(&http.Client{
 ```
 flux（用户入口）
   │
-  └── Client.Do() / DoStream()
+  └── DoFuncGen(client, inputProtocol) → DoFunc
+      StreamDoFuncGen(client, inputProtocol) → StreamDoFunc
   │
 flux（用户数据）
   │
@@ -101,11 +144,11 @@ flux（用户数据）
   │
 endpoint（全局状态）
   │
-  └── Endpoint: Provider + Model + Health（全局单例）
+  └── Endpoint: Provider + Model + Protocols[] + Health（全局单例）
   │
 provider（全局状态）
   │
-  └── Provider: URL + Protocol + Health（全局单例）
+  └── Provider: BaseURL + Health（全局单例，协议无关）
 ```
 
 ---
@@ -122,6 +165,17 @@ Endpoint 层（模型）：
   500 Server Error → 熔断（阈值=3）
   恢复：60s
 ```
+
+---
+
+## 协议选择
+
+当请求以输入协议 X 到达时：
+1. `SelectProtocol(X)` 检查 endpoint 的 `Protocols` 列表是否包含 X
+2. 命中 → 直传（无转换）
+3. 未命中 → 回退到 `Protocols[0]`（应用协议转换）
+
+这使得 DeepSeek（原生 OpenAI）等 Provider 可以通过协议转换为 Anthropic 格式请求服务。
 
 ---
 

@@ -17,64 +17,19 @@ import (
 )
 
 // Do sends a chat completion request with automatic retry and failover.
-// It handles endpoint selection, health checking, and protocol translation.
-// Returns the response body in the input protocol format, usage statistics, or an error.
+// Deprecated: Use DoFuncGen to generate a pre-prepared DoFunc instead.
 func (c *Client) Do(ctx context.Context, rawReq []byte, inputProtocol provider.Protocol) ([]byte, *message.Usage, error) {
-	req, err := parseRequest(rawReq, inputProtocol)
-	if err != nil {
-		return nil, nil, fmt.Errorf("parse request: %w", err)
-	}
-
-	var lastErr error
-	retryMax := c.RetryMax()
-
-	for retry := 0; retry <= retryMax; retry++ {
-		e := c.Next()
-		if e == nil {
-			break
-		}
-
-		if retry > 0 {
-			backoff := backoffWithJitter(retry)
-			select {
-			case <-time.After(backoff):
-			case <-ctx.Done():
-				return nil, nil, ctx.Err()
-			}
-		}
-
-		start := time.Now()
-		resp, usage, err := c.doWithParsedRequest(ctx, e, req, inputProtocol)
-		latencyMs := int(time.Since(start).Milliseconds())
-
-		if err == nil {
-			c.Feedback(e, nil, latencyMs)
-			return resp, usage, nil
-		}
-
-		lastErr = err
-		c.Feedback(e, err, 0)
-
-		// Don't retry non-retryable errors (auth, invalid request, etc.)
-		if !errors.IsRetryable(err) {
-			break
-		}
-	}
-
-	if lastErr != nil {
-		return nil, nil, lastErr
-	}
-	return nil, nil, fmt.Errorf("no available endpoints")
+	resp, usage, _, err := DoFuncGen(c, inputProtocol)(ctx, rawReq)
+	return resp, usage, err
 }
 
-func (c *Client) doWithParsedRequest(ctx context.Context, ue *UserEndpoint, req *message.MessageRequest, inputProtocol provider.Protocol) ([]byte, *message.Usage, error) {
-	targetProtocol := ue.Protocol()
+func doWithParsedRequest(ctx context.Context, ue *UserEndpoint, req *message.MessageRequest, targetProtocol provider.Protocol, inputProtocol provider.Protocol, httpClient *http.Client) ([]byte, *message.Usage, error) {
 	reqBody, err := translateRequest(req, targetProtocol)
 	if err != nil {
 		return nil, nil, fmt.Errorf("convert request: %w", err)
 	}
 
-	respBody, err := transport(ctx, ue, reqBody, c.httpClient)
+	respBody, err := transport(ctx, ue, reqBody, targetProtocol, httpClient)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -136,110 +91,21 @@ type StreamResult struct {
 }
 
 // DoStream sends a streaming chat completion request with automatic retry and failover.
-// Returns a StreamResult with a channel for SSE chunks and a Usage function for final stats.
-// Caller must call StreamResult.Close() to release resources when done.
+// Deprecated: Use StreamDoFuncGen to generate a pre-prepared streaming closure instead.
 func (c *Client) DoStream(ctx context.Context, rawReq []byte, inputProtocol provider.Protocol) (*StreamResult, error) {
-	req, err := parseRequest(rawReq, inputProtocol)
-	if err != nil {
-		return nil, fmt.Errorf("parse request: %w", err)
-	}
-	req = req.WithStream(true)
-
-	var lastErr error
-	retryMax := c.RetryMax()
-
-	for retry := 0; retry <= retryMax; retry++ {
-		e := c.Next()
-		if e == nil {
-			break
-		}
-
-		if retry > 0 {
-			backoff := backoffWithJitter(retry)
-			select {
-			case <-time.After(backoff):
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			}
-		}
-
-		start := time.Now()
-		result, err := c.doStreamWithParsedRequest(ctx, e, req, inputProtocol)
-
-		if err == nil {
-			// Wrap the result channel to track success on completion
-			wrappedCh := make(chan []byte, defaultWrappedChannelBuffer)
-			wrappedResult := &StreamResult{
-				Ch:     wrappedCh,
-				Usage:  result.Usage,
-				Error:  result.Error,
-				cancel: result.cancel,
-			}
-
-			go func() {
-				defer func() {
-					if r := recover(); r != nil {
-						log.Printf("[fluxcore] stream wrapper panic recovered: %v", r)
-					}
-				}()
-				defer close(wrappedCh)
-				defer result.Close()
-
-				for {
-					select {
-					case chunk, ok := <-result.Ch:
-						if !ok {
-							// Stream completed - check if there was an error
-							latencyMs := int(time.Since(start).Milliseconds())
-							if result.Error() == nil {
-								c.Feedback(e, nil, latencyMs)
-							} else {
-								c.Feedback(e, result.Error(), 0)
-							}
-							return
-						}
-						// Non-blocking send to avoid goroutine leak
-						select {
-						case wrappedCh <- chunk:
-						case <-ctx.Done():
-							c.Feedback(e, ctx.Err(), 0)
-							return
-						}
-					case <-ctx.Done():
-						c.Feedback(e, ctx.Err(), 0)
-						return
-					}
-				}
-			}()
-
-			return wrappedResult, nil
-		}
-
-		lastErr = err
-		c.Feedback(e, err, 0)
-
-		// Don't retry non-retryable errors
-		if !errors.IsRetryable(err) {
-			break
-		}
-	}
-
-	if lastErr != nil {
-		return nil, lastErr
-	}
-	return nil, fmt.Errorf("no available targets")
+	result, _, _, err := StreamDoFuncGen(c, inputProtocol)(ctx, rawReq)
+	return result, err
 }
 
-func (c *Client) doStreamWithParsedRequest(ctx context.Context, ue *UserEndpoint, req *message.MessageRequest, inputProtocol provider.Protocol) (*StreamResult, error) {
+func doStreamWithParsedRequest(ctx context.Context, ue *UserEndpoint, req *message.MessageRequest, targetProtocol provider.Protocol, inputProtocol provider.Protocol, httpClient *http.Client) (*StreamResult, error) {
 	start := time.Now()
 
-	targetProtocol := ue.Protocol()
 	reqBody, err := translateRequest(req, targetProtocol)
 	if err != nil {
 		return nil, fmt.Errorf("convert request: %w", err)
 	}
 
-	respBody, cancel, err := streamTransport(ctx, ue, reqBody, c.httpClient)
+	respBody, cancel, err := streamTransport(ctx, ue, reqBody, targetProtocol, httpClient)
 	if err != nil {
 		return nil, err
 	}
@@ -309,7 +175,7 @@ func (c *Client) doStreamWithParsedRequest(ctx context.Context, ue *UserEndpoint
 	}, nil
 }
 
-func streamTransport(ctx context.Context, ue *UserEndpoint, body []byte, client *http.Client) (io.ReadCloser, context.CancelFunc, error) {
+func streamTransport(ctx context.Context, ue *UserEndpoint, body []byte, targetProtocol provider.Protocol, client *http.Client) (io.ReadCloser, context.CancelFunc, error) {
 	var cancel context.CancelFunc = func() {} // no-op default
 
 	// Ensure requests have a deadline for timeout control
@@ -317,12 +183,12 @@ func streamTransport(ctx context.Context, ue *UserEndpoint, body []byte, client 
 		ctx, cancel = context.WithTimeout(ctx, defaultTimeout)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", buildURL(ue, true), bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", buildURL(ue, targetProtocol, true), bytes.NewReader(body))
 	if err != nil {
 		cancel()
 		return nil, nil, err
 	}
-	setHeaders(req, ue, true)
+	setHeaders(req, ue, targetProtocol, true)
 
 	resp, err := client.Do(req)
 	if err != nil {

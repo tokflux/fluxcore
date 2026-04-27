@@ -2,11 +2,40 @@ package translate
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"strings"
 
 	"github.com/tokzone/fluxcore/message"
 )
+
+// SystemContent handles Anthropic system field which can be string or []{"type":"text","text":"..."}
+type SystemContent []string
+
+func (s *SystemContent) UnmarshalJSON(data []byte) error {
+	// Try string first
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		*s = []string{str}
+		return nil
+	}
+	// Try array of content blocks
+	var blocks []struct {
+		Type string `json:"type"`
+		Text string `json:"text,omitempty"`
+	}
+	if err := json.Unmarshal(data, &blocks); err != nil {
+		return fmt.Errorf("system: expected string or array of text blocks: %w", err)
+	}
+	var texts []string
+	for _, b := range blocks {
+		if b.Type == "text" && b.Text != "" {
+			texts = append(texts, b.Text)
+		}
+	}
+	*s = texts
+	return nil
+}
 
 // AnthropicRequest represents Anthropic API request structure
 type AnthropicRequest struct {
@@ -15,7 +44,7 @@ type AnthropicRequest struct {
 	Temperature float64        `json:"temperature,omitempty"`
 	TopP        float64        `json:"top_p,omitempty"`
 	Stream      bool           `json:"stream,omitempty"`
-	System      string         `json:"system,omitempty"`
+	System      SystemContent  `json:"system,omitempty"`
 	Messages    []AnthropicMsg `json:"messages"`
 }
 
@@ -61,11 +90,11 @@ func AnthropicToMessageRequest(body io.Reader) (*message.MessageRequest, error) 
 		Stream:      ar.Stream,
 	}
 
-	// System message from system field
-	if ar.System != "" {
+	// System message from system field (string or array of text blocks)
+	for _, sysText := range ar.System {
 		req.Messages = append(req.Messages, message.Message{
 			Role:    "system",
-			Content: []message.Content{message.TextContent(ar.System)},
+			Content: []message.Content{message.TextContent(sysText)},
 		})
 	}
 
@@ -307,6 +336,59 @@ func OpenAISSEToAnthropicSSE(chunk *message.StreamChunk) []string {
 	return events
 }
 
+func init() {
+	registerChunkParser("anthropic", parseAnthropicChunk)
+}
+
+// parseAnthropicChunk parses an Anthropic SSE event into a StreamChunk.
+func parseAnthropicChunk(data []byte) (*message.StreamChunk, error) {
+	var event anthropicSSEChunk
+	if err := json.Unmarshal(data, &event); err != nil {
+		return nil, err
+	}
+	switch event.Type {
+	case "content_block_delta":
+		text := ""
+		if event.Delta["type"] == "text_delta" {
+			if t, ok := event.Delta["text"].(string); ok {
+				text = t
+			}
+		}
+		return &message.StreamChunk{
+			Object: "chat.completion.chunk",
+			Choices: []message.StreamChoice{{
+				Index: event.Index,
+				Delta: message.Message{
+					Content: []message.Content{message.TextContent(text)},
+				},
+			}},
+		}, nil
+	case "message_delta":
+		stopReason := ""
+		if sr, ok := event.Delta["stop_reason"].(string); ok {
+			stopReason = sr
+		}
+		return &message.StreamChunk{
+			Object: "chat.completion.chunk",
+			Choices: []message.StreamChoice{{
+				Index:        0,
+				FinishReason: &stopReason,
+			}},
+		}, nil
+	case "message_start":
+		return &message.StreamChunk{
+			Object: "chat.completion.chunk",
+			Choices: []message.StreamChoice{{
+				Index: 0,
+				Delta: message.Message{
+					Role: "assistant",
+				},
+			}},
+		}, nil
+	}
+	return nil, nil
+}
+
 // AnthropicSSEToOpenAISSE converts Anthropic SSE line to OpenAI SSE format
 func AnthropicSSEToOpenAISSE(line []byte) []byte {
 	var event anthropicSSEChunk
@@ -316,6 +398,9 @@ func AnthropicSSEToOpenAISSE(line []byte) []byte {
 
 	switch event.Type {
 	case "content_block_delta":
+		if event.Delta["type"] != "text_delta" {
+			return nil // skip non-text deltas (e.g., input_json_delta)
+		}
 		text := ""
 		if delta, ok := event.Delta["text"].(string); ok {
 			text = delta
@@ -361,8 +446,19 @@ func AnthropicSSEToOpenAISSE(line []byte) []byte {
 		return []byte("data: " + string(data) + "\n\n")
 
 	case "message_start":
-		// Skip, no equivalent in OpenAI SSE
-		return nil
+		chunk := message.StreamChunk{
+			ID:     "",
+			Object: "chat.completion.chunk",
+			Model:  "",
+			Choices: []message.StreamChoice{{
+				Index: 0,
+				Delta: message.Message{
+					Role: "assistant",
+				},
+			}},
+		}
+		data, _ := json.Marshal(chunk)
+		return []byte("data: " + string(data) + "\n\n")
 
 	default:
 		return nil

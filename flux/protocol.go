@@ -10,14 +10,13 @@ import (
 	"github.com/tokzone/fluxcore/provider"
 )
 
-// buildURL constructs the API URL for a user endpoint
-func buildURL(ue *UserEndpoint, stream bool) string {
+// buildURL constructs the API URL for a user endpoint and target protocol.
+func buildURL(ue *UserEndpoint, targetProtocol provider.Protocol, stream bool) string {
 	if ue == nil {
 		return ""
 	}
 	var path string
-	protocol := ue.Protocol()
-	switch protocol {
+	switch targetProtocol {
 	case provider.ProtocolGemini:
 		if stream {
 			path = "/v1/models/" + ue.Model() + ":streamGenerateContent?alt=sse"
@@ -35,7 +34,7 @@ func buildURL(ue *UserEndpoint, stream bool) string {
 }
 
 // setHeaders sets the required headers for an API request
-func setHeaders(req *http.Request, ue *UserEndpoint, stream bool) {
+func setHeaders(req *http.Request, ue *UserEndpoint, targetProtocol provider.Protocol, stream bool) {
 	if ue == nil {
 		return
 	}
@@ -44,8 +43,7 @@ func setHeaders(req *http.Request, ue *UserEndpoint, stream bool) {
 		req.Header.Set("Accept", "text/event-stream")
 	}
 
-	protocol := ue.Protocol()
-	switch protocol {
+	switch targetProtocol {
 	case provider.ProtocolGemini:
 		req.Header.Set("x-goog-api-key", ue.Secret())
 	case provider.ProtocolAnthropic:

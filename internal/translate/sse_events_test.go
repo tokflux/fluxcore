@@ -33,9 +33,14 @@ func TestAnthropicSSEToOpenAIsseEventTypes(t *testing.T) {
 	t.Run("message_start", func(t *testing.T) {
 		data := []byte(`{"type":"message_start","message":{"id":"msg_123","role":"assistant"}}`)
 		result := AnthropicSSEToOpenAISSE(data)
-		// message_start is not converted (returns nil)
-		if result != nil {
-			t.Error("expected nil for message_start event")
+		if result == nil {
+			t.Error("expected non-nil result for message_start event")
+		}
+		if !bytes.Contains(result, []byte("data:")) {
+			t.Error("expected data: prefix")
+		}
+		if !bytes.Contains(result, []byte("\"role\":\"assistant\"")) {
+			t.Error("expected role in message_start conversion")
 		}
 	})
 
